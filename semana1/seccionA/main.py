@@ -3,16 +3,21 @@
 """
 Grammar:
 
-expression : expression PLUS term
-            | expression MINUS term
-            | term
+expression : expression add_plus_sign term
+           | expression add_minus_sign term
+           | term
 
-term       : term TIMES factor
-            | term DIVIDE factor
-            | factor
+term       : term mul_times_sign factor
+           | term mul_div_sign factor
+           | factor
+
+add_plus_sign  : PLUS
+add_minus_sign : MINUS
+mul_times_sign : TIMES
+mul_div_sign   : DIVIDE
 
 factor     : NUMBER
-            | LPAREN expression RPAREN
+           | LPAREN expression RPAREN
 """
 
 import ply.yacc as yacc
@@ -32,39 +37,36 @@ from calclex import tokens
 
 
 def p_expression_plus(p):
-    "expression : expression PLUS term"
+    "expression : expression add_plus_sign term"
     global step
     global dot
     global node_stack
     term_node = node_stack.pop()
+    plus_node = node_stack.pop()
     expr_node = node_stack.pop()
     step += 1
-    dot.node(str(step), "+")    
-    dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
-    step += 1
     dot.node(str(step), "E")
-    dot.edge(str(step), str(expr_node))
-    dot.edge(str(step), str(step - 1))
-    dot.edge(str(step), str(term_node))
+    dot.edge(str(plus_node), str(expr_node))
+    dot.edge(str(plus_node), str(term_node))
+    dot.edge(str(step), str(plus_node))
     dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
     node_stack.append(step)
     p[0] = p[1] + p[3]
 
+
 def p_expression_minus(p):
-    "expression : expression MINUS term"
+    "expression : expression add_minus_sign term"
     global step
     global dot
     global node_stack
     term_node = node_stack.pop()
+    minus_node = node_stack.pop()
     expr_node = node_stack.pop()
     step += 1
-    dot.node(str(step), "-")
-    dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
-    step += 1
-    dot.node(str(step), "E")    
-    dot.edge(str(step), str(expr_node))
-    dot.edge(str(step), str(step - 1))
-    dot.edge(str(step), str(term_node))
+    dot.node(str(step), "E")
+    dot.edge(str(minus_node), str(expr_node))
+    dot.edge(str(minus_node), str(term_node))
+    dot.edge(str(step), str(minus_node))
     dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
     node_stack.append(step)
     p[0] = p[1] - p[3]
@@ -85,42 +87,36 @@ def p_expression_term(p):
 
 
 def p_term_times(p):
-    "term : term TIMES factor"
+    "term : term mul_times_sign factor"
     global step
     global dot
     global node_stack
     factor_node = node_stack.pop()
+    times_node = node_stack.pop()
     term_node = node_stack.pop()
     step += 1
-    dot.node(str(step), "*")
-    mul_node = step    
-    dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
-    step += 1
-    dot.node(str(step), "T")    
-    dot.edge(str(step), str(term_node))
-    dot.edge(str(step), str(mul_node))
-    dot.edge(str(step), str(factor_node))
+    dot.node(str(step), "T")
+    dot.edge(str(times_node), str(term_node))
+    dot.edge(str(times_node), str(factor_node))
+    dot.edge(str(step), str(times_node))
     dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
     node_stack.append(step)
     p[0] = p[1] * p[3]
 
 
 def p_term_div(p):
-    "term : term DIVIDE factor"
+    "term : term mul_div_sign factor"
     global step
     global dot
     global node_stack
     factor_node = node_stack.pop()
+    div_node = node_stack.pop()
     term_node = node_stack.pop()
     step += 1
-    dot.node(str(step), "/")
-    dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
-    div_node = step
-    step += 1
-    dot.node(str(step), "T")    
-    dot.edge(str(step), str(term_node))
+    dot.node(str(step), "T")
+    dot.edge(str(div_node), str(term_node))
+    dot.edge(str(div_node), str(factor_node))
     dot.edge(str(step), str(div_node))
-    dot.edge(str(step), str(factor_node))
     dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
     node_stack.append(step)
     p[0] = p[1] / p[3]
@@ -170,6 +166,54 @@ def p_factor_expr(p):
     p[0] = p[2]
 
 
+def p_add_plus_sign(p):
+    "add_plus_sign : PLUS"
+    global step
+    global dot
+    global node_stack
+    step += 1
+    dot.node(str(step), "+")
+    dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
+    node_stack.append(step)
+    p[0] = p[1]
+
+
+def p_add_minus_sign(p):
+    "add_minus_sign : MINUS"
+    global step
+    global dot
+    global node_stack
+    step += 1
+    dot.node(str(step), "-")
+    dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
+    node_stack.append(step)
+    p[0] = p[1]
+
+
+def p_mul_times_sign(p):
+    "mul_times_sign : TIMES"
+    global step
+    global dot
+    global node_stack
+    step += 1
+    dot.node(str(step), "*")
+    dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
+    node_stack.append(step)
+    p[0] = p[1]
+
+
+def p_mul_div_sign(p):
+    "mul_div_sign : DIVIDE"
+    global step
+    global dot
+    global node_stack
+    step += 1
+    dot.node(str(step), "/")
+    dot.render(filename=f"{OUTPUT_DIRECTORY}/step_{step}", format="png", cleanup=True)
+    node_stack.append(step)
+    p[0] = p[1]
+
+
 # Error rule for syntax errors
 def p_error(p):
     print("Syntax error in input!")
@@ -196,7 +240,7 @@ output_dir = Path("output")
 # Ordenar correctamente por el número del archivo
 files = sorted(
     output_dir.glob("step_*.png"),
-    key=lambda p: int(re.search(r"step_(\d+)", p.stem).group(1))
+    key=lambda p: int(re.search(r"step_(\d+)", p.stem).group(1)),
 )
 
 # Cargar imágenes
@@ -223,7 +267,7 @@ frames[0].save(
     "animation.gif",
     save_all=True,
     append_images=frames[1:],
-    duration=1000,   # ms por frame
+    duration=1000,  # ms por frame
     loop=0,
     optimize=False,
 )
