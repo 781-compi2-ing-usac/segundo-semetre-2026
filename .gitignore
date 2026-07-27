@@ -219,5 +219,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-parse*
+parser.out
+parsetab.py
 output/
