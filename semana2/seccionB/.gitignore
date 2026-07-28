@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+parser.out
+parsetab.py
+ast.dot
+*.png
+*.svg
+781_Proyecto1.pdf
