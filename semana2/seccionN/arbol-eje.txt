@@ -1,0 +1,65 @@
+######## UNA SOLA INSTRUCCION
+{
+    'ARBOL': 
+    {
+        'OPERACION': 'SUMA', 
+        'VALOR1': 
+            {
+                'OPERACION': 'SUMA', 
+            'VALOR1': 
+                {
+                    'TIPO': 'INT', 
+                    'VALOR': 1
+                    }, 
+            'VALOR2': 
+            {
+                'TIPO': 'INT', 
+                'VALOR': 4
+            }
+        }, 
+        'VALOR2': 
+        {
+            'TIPO': 'INT', 
+            'VALOR': 5
+        }
+    }
+}
+
+#### MULTIPLES INSTRUCCIONES
+[
+   {
+      "INSTRUCCION":{
+         "OPERACION":"SUMA",
+         "VALOR1":{
+            "OPERACION":"SUMA",
+            "VALOR1":{
+               "TIPO":"INT",
+               "VALOR":1
+            },
+            "VALOR2":{
+               "TIPO":"INT",
+               "VALOR":4
+            }
+         },
+         "VALOR2":{
+            "TIPO":"INT",
+            "VALOR":5
+         }
+      }
+   },
+   [
+      {
+         "INSTRUCCION":{
+            "OPERACION":"SUMA",
+            "VALOR1":{
+               "TIPO":"FLOAT",
+               "VALOR":2.5
+            },
+            "VALOR2":{
+               "TIPO":"FLOAT",
+               "VALOR":2.3
+            }
+         }
+      }
+   ]
+]
