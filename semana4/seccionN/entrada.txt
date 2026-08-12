@@ -1,0 +1,15 @@
+let float expr = 2.5 * 2.3 + 2.8; 
+if 1 {
+   let int entre = 2 + 3;
+   let float expr  = 3333;
+   print( expr );
+}
+print( expr );
+
+
+def funcion () {
+    
+    print( expr );
+}
+
+funcion();
