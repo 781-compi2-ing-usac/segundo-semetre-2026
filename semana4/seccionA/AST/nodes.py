@@ -123,3 +123,52 @@ class WhileNode(Node):
 
     def visit(self, visitor):
         return visitor.visit_while(self)
+
+class FunctionDeclarationNode(Node):
+    def __init__(self, func_name, parameters, return_type, block):
+        super().__init__('FUNCTION_DECLARATION')
+        self.func_name = func_name
+        self.parameters = parameters        
+        self.return_type = return_type
+        self.block = block
+
+    def __repr__(self):
+        return f"FunctionDeclarationNode({self.func_name}, {self.parameters}, {self.return_type}, {self.block})"
+
+    def visit(self, visitor):
+        return visitor.visit_function_declaration(self)
+
+class FunctionCallNode(Node):
+    def __init__(self, func_name, arguments):
+        super().__init__('FUNCTION_CALL')
+        self.func_name = func_name
+        self.arguments = arguments
+
+    def __repr__(self):
+        return f"FunctionCallNode({self.func_name}, {self.arguments})"
+
+    def visit(self, visitor):
+        return visitor.visit_function_call(self)
+
+class ParamNode(Node):
+    def __init__(self, param_type, param_name):
+        super().__init__('PARAM')
+        self.param_type = param_type
+        self.param_name = param_name
+
+    def __repr__(self):
+        return f"ParamNode({self.param_type}, {self.param_name})"
+
+    def visit(self, visitor):
+        return visitor.visit_param(self)
+
+class ReturnNode(Node):
+    def __init__(self, expression=None):
+        super().__init__('RETURN')
+        self.expression = expression
+
+    def __repr__(self):
+        return f"ReturnNode({self.expression})"
+
+    def visit(self, visitor):
+        return visitor.visit_return(self)

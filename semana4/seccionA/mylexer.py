@@ -9,6 +9,9 @@ reserved = {
     'if': 'IF',
     'while': 'WHILE',
     'print': 'PRINT',
+    'fn': 'FUNCTION',    
+    'return': 'RETURN',
+    'void': 'VOID',
 }
 
 tokens = (        
@@ -28,6 +31,8 @@ tokens = (
     'LE',
     'GE',
     'EQ',    
+    'COLON',
+    'COMMA',
 ) + tuple(reserved.values())
 
 # Regular expression rules for simple tokens
@@ -45,6 +50,8 @@ t_GT = r'>'
 t_LE = r'<='
 t_GE = r'>='
 t_EQ = r'=='
+t_COLON = r':'
+t_COMMA = r','
 
 t_ignore = ' \t'
 

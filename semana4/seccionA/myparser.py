@@ -9,8 +9,24 @@ stmt : type ID EQUALS E
       | PRINT LPAREN E RPAREN
       | IF LPAREN E RPAREN block
       | WHILE LPAREN E RPAREN block
+      | FUNCTION ID LPAREN params RPAREN COLON type block
+      | ID LPAREN args RPAREN
+      | ret_stmt
 
-block : LKEY stmts RKEY      
+ret_stmt : RETURN E
+      | RETURN
+      
+block : LKEY stmts RKEY  
+
+params : params COMMA param
+       | param
+       |
+
+param : type COLON ID
+
+args : args COMMA E
+     | E
+     |
 
 type : int | float | bool
 
@@ -28,6 +44,7 @@ E : E LT E
     | true
     | false
     | LPAREN E RPAREN
+    | ID LPAREN args RPAREN
 """
 import ply.yacc as yacc
 from mylexer import tokens
@@ -75,9 +92,57 @@ def p_stmt_while(p):
     'stmt : WHILE LPAREN E RPAREN block'
     p[0] = WhileNode(p[3], p[5])
 
+def p_stmt_function(p):
+    'stmt : FUNCTION ID LPAREN params RPAREN COLON type block'
+    p[0] = FunctionDeclarationNode(p[2], p[4], p[7], p[8])
+
+def p_stmt_function_call(p):
+    'stmt : ID LPAREN args RPAREN'
+    p[0] = FunctionCallNode(p[1], p[3])
+
+def p_stmt_return(p):
+    'stmt : ret_stmt'
+    p[0] = p[1]
+
+def p_ret_stmt_return(p):
+    'ret_stmt : RETURN E'
+    p[0] = ReturnNode(p[2])
+
+def p_ret_stmt_return_empty(p):
+    'ret_stmt : RETURN'
+    p[0] = ReturnNode()
+
 def p_block(p):
     'block : LKEY stmts RKEY'
     p[0] = BlockNode(p[2])
+
+def p_params_recursive(p):
+    'params : params COMMA param'
+    p[0] = p[1] + [p[3]]
+
+def p_params(p):
+    'params : param'
+    p[0] = [p[1]]
+
+def p_no_params(p):
+    'params : '
+    p[0] = []
+
+def p_param(p):
+    'param : type COLON ID'
+    p[0] = ParamNode(p[1], p[3])
+
+def p_args_recursive(p):
+    'args : args COMMA E'
+    p[0] = p[1] + [p[3]]
+
+def p_args(p):
+    'args : E'    
+    p[0] = [p[1]]
+
+def p_no_args(p):
+    'args : '
+    p[0] = []
 
 def p_type_int(p):
     'type : INT'
@@ -90,6 +155,10 @@ def p_type_float(p):
 def p_type_bool(p):
     'type : BOOL'
     p[0] = TypeNode('bool')
+
+def p_type_void(p):
+    'type : VOID'
+    p[0] = TypeNode('void')
 
 def p_E_binop(p):
     '''E : E PLUS E
@@ -123,6 +192,10 @@ def p_E_true(p):
 def p_E_group(p):
     'E : LPAREN E RPAREN'
     p[0] = p[2]
+
+def p_E_function_call(p):
+    'E : ID LPAREN args RPAREN'
+    p[0] = FunctionCallNode(p[1], p[3])
 
 # Error rule for syntax errors
 

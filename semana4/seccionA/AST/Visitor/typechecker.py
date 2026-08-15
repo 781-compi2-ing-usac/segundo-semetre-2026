@@ -1,6 +1,7 @@
 from AST.symtable import SymTable
 from AST.nodes import *
 from AST.Visitor.visitor import Visitor
+from AST.Structures.foreign import Foreign
 
 class TypeChecker(Visitor):
     def __init__(self):
@@ -74,7 +75,7 @@ class TypeChecker(Visitor):
 
     def visit_print(self, node: PrintNode):
         expr_type = node.expression.visit(self)
-        if expr_type not in ['int', 'float', 'string', 'bool']:
+        if expr_type not in ['int', 'float', 'string', 'bool', 'void']:
             self.errors.append(f'Invalid type for print statement: {expr_type}')
         return expr_type 
 
@@ -91,3 +92,38 @@ class TypeChecker(Visitor):
             self.errors.append(f'Condition in while statement must be of type bool, got {condition_type}')
         node.block.visit(self)
         return
+
+    def visit_function_declaration(self, node: FunctionDeclarationNode):              
+        params_types = [param.visit(self) for param in node.parameters]
+        func_type = node.return_type.visit(self)
+        self.symbol_table.add_symbol(node.func_name, (params_types, func_type))
+        for stmt in node.block.statements:
+            stmt_type = stmt.visit(self)
+            if isinstance(stmt, ReturnNode):
+                if stmt_type != func_type:
+                    self.errors.append(f'Return type mismatch in function {node.func_name}: expected {func_type}, got {stmt_type}')
+        return 
+
+    def visit_function_call(self, node: FunctionCallNode):
+        func_info = self.symbol_table.get_symbol(node.func_name)
+        if func_info is None:
+            self.errors.append(f"Undefined function: {node.func_name}")
+            return None
+        params_types, return_type = func_info
+        if len(params_types) != len(node.arguments):
+            self.errors.append(f"Argument count mismatch in function call: expected {len(params_types)}, got {len(node.arguments)}")
+            return return_type
+        for i, arg in enumerate(node.arguments):
+            arg_type = arg.visit(self)
+            if arg_type != params_types[i]:
+                self.errors.append(f"Argument type mismatch in function call: expected {params_types[i]}, got {arg_type}")
+        return return_type
+
+    def visit_param(self, node: ParamNode):
+        return node.param_type.visit(self)
+
+    def visit_return(self, node: ReturnNode):
+        if node.expression:
+            return_type = node.expression.visit(self)
+            return return_type
+        return 'void'
