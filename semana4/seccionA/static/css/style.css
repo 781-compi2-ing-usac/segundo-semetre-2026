@@ -1,0 +1,76 @@
+html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+}
+
+
+#app {
+
+    display: grid;
+
+    grid-template-rows:
+        50px
+        70%
+        30%;
+
+    height: 100vh;
+
+}
+
+
+/* Barra superior */
+
+#toolbar {
+
+    display: flex;
+
+    align-items: center;
+
+    padding: 8px;
+
+    background: #252526;
+
+}
+
+
+button {
+
+    padding: 8px 20px;
+
+    cursor: pointer;
+
+}
+
+
+/* Editor */
+
+#editor {
+
+    min-height: 0;
+
+}
+
+
+/* Consola */
+
+#console {
+
+    min-height: 0;
+
+    overflow: auto;
+
+    background: #1e1e1e;
+
+    color: white;
+
+    padding: 10px;
+
+}
+
+
+pre {
+
+    margin: 0;
+
+}
