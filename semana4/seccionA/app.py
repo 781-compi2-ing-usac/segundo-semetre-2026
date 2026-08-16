@@ -38,7 +38,7 @@ def compile():
         if checker.errors:            
             response["errors"] = checker.errors
             return jsonify(response)        
-
+        
         interpreter = Interpreter()
 
         output = StringIO()        
@@ -48,7 +48,7 @@ def compile():
                 node.visit(interpreter)
 
 
-        response["output"] = output.getvalue().splitlines()
+        response["output"] = output.getvalue().splitlines()        
 
 
     except Exception as e:

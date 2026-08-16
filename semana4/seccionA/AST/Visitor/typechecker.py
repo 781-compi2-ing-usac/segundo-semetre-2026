@@ -23,9 +23,8 @@ class TypeChecker(Visitor):
             self.errors.append(f"Undefined variable: {node.name}")
         return var_type
 
-    def visit_binary_op(self, node: BinaryOpNode):                
-        print(node.left)
-        left_type = node.left.visit(self)
+    def visit_binary_op(self, node: BinaryOpNode):                        
+        left_type = node.left.visit(self)        
         right_type = node.right.visit(self)
 
         arthmetic_ops = ['+', '-', '*', '/']
@@ -120,6 +119,7 @@ class TypeChecker(Visitor):
         return return_type
 
     def visit_param(self, node: ParamNode):
+        self.symbol_table.add_symbol(node.param_name, node.param_type.visit(self))
         return node.param_type.visit(self)
 
     def visit_return(self, node: ReturnNode):

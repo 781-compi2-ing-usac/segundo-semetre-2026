@@ -7,9 +7,9 @@ class SymTable:
         self.symbols[name] = value
 
     def get_symbol(self, name):
-        if name in self.symbols:
-            return self.symbols[name]
-        if self.parent:
+        if name in self.symbols:            
+            return self.symbols[name]         
+        if self.parent:            
             return self.parent.get_symbol(name)
         return None
 
@@ -20,3 +20,6 @@ class SymTable:
             self.parent.update_symbol(name, value)
         else:
             raise Exception(f"Symbol '{name}' not found in the symbol table.")
+
+    def __repr__(self):
+        return f"SymTable(symbols={self.symbols}, parent={self.parent})"
