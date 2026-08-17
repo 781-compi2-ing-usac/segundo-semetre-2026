@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Compilador</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+
+<div id="app">
+
+    <div id="toolbar">
+        <button onclick="compileCode()">
+            ▶ Ejecutar
+        </button>
+    </div>
+
+
+    <div id="editor"></div>
+
+
+    <div id="console">
+        <pre id="output"></pre>
+    </div>
+
+</div>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/loader.min.js"></script>
+<script src="/static/js/editor.js"></script>
+
+</body>
+</html>
