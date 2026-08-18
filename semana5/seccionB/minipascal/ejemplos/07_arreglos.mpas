@@ -1,0 +1,52 @@
+program Arreglos;
+begin
+  { --------------------------------------------------------------------
+    1. Declaración, acceso indexado de escritura y de lectura.
+       Sin sintaxis literal (`[1,2,3]`): siempre arranca lleno con el
+       valor por defecto del tipo de elemento (0 para integer).
+  -------------------------------------------------------------------- }
+  var notas: array[5] of integer;
+
+  notas[0] := 90;
+  notas[1] := 85;
+  notas[2] := 70;
+  notas[3] := 60;
+  notas[4] := 95;
+
+  writeln(notas[2]);   { 70 }
+
+  { --------------------------------------------------------------------
+    2. Recorrer un arreglo con `length` (función embebida) como límite
+       del ciclo, en vez de repetir el tamaño a mano.
+  -------------------------------------------------------------------- }
+  var suma: integer := 0;
+  var i: integer := 0;
+  while i < length(notas) do begin
+    suma := suma + notas[i];
+    i := i + 1;
+  end;
+
+  writeln(suma);   { 400 }
+
+  { --------------------------------------------------------------------
+    3. Índice fuera de rango: error semántico, línea y columna, y el
+       programa SIGUE — la misma resiliencia de siempre, aplicada a un
+       caso nuevo.
+  -------------------------------------------------------------------- }
+  writeln(notas[10]);
+
+  { --------------------------------------------------------------------
+    4. Los arreglos se pasan por VALOR a una función: lo que la función
+       le hace a SU copia no se ve reflejado afuera. Ver el comentario
+       en Llamada.evaluar (ast_nodes.py) — es una simplificación
+       deliberada, no la única opción válida de diseño.
+  -------------------------------------------------------------------- }
+  function duplicarPrimero(datos: array[5] of integer): integer;
+  begin
+    datos[0] := datos[0] * 2;
+    return datos[0];
+  end;
+
+  writeln(duplicarPrimero(notas));   { 180 (90 * 2) }
+  writeln(notas[0]);                 { sigue siendo 90: la copia de adentro no lo tocó }
+end.
