@@ -1,0 +1,47 @@
+from abc import ABC, abstractmethod
+class Expresion(ABC):
+    @abstractmethod
+    def accept(self, visitor):
+        pass
+
+class ExpresionValor(Expresion):
+    def __init__(self, val, tipo='INT'):
+        self.val = val
+        self.tipo = tipo
+
+    def accept(self, visitor):
+        return visitor.visit_expresion_valor(self)
+
+class ExpresionBinaria(Expresion):
+    def __init__(self, exp1, exp2, operador):
+        self.exp1 = exp1
+        self.exp2 = exp2
+        self.operador = operador
+    
+    def accept(self, visitor):
+        return visitor.visit_expresion_binaria(self)
+
+class Funcion_exec(Expresion):
+    def __init__(self, identificador):
+        self.identificador = identificador
+
+    def accept(self, visitor):
+        return visitor.visit_funcion_exec(self)
+
+
+class Struct_init(Expresion):
+    def __init__(self, identificador, list_datos):
+        self.identificador = identificador
+        self.list_datos = list_datos
+    
+    def accept(self,visitor):
+        return visitor.visit_init_struct(self)
+
+class Struct_valor(Expresion):
+    def __init__(self, identificador, valor):
+        self.identificador = identificador
+        self.valor = valor
+
+    
+    def accept(self, visitor):
+        return visitor.visit_valor_struct(self)
