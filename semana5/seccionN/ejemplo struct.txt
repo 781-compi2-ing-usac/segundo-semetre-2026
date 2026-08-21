@@ -1,0 +1,15 @@
+
+
+struct ESTO_ES_UN_STRUCT {
+    ID : TIPO, 
+    ID : TIPO,
+    ....
+} 
+
+{struct : [lista valores]
+
+struc. -> buscar {}
+
+struct.valores
+
+tabla[struct][valor]

@@ -1,0 +1,10 @@
+struct ESTO_ES_UN_STRUCT {
+    algo : int, 
+    thunda : int
+} ;
+
+let struct_resultante =  ESTO_ES_UN_STRUCT {
+    algo = 2, 
+    thunda = 4
+} ;
+
