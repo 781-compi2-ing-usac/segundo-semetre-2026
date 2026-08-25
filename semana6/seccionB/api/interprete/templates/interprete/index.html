@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>MiniPascal — demo</title>
+</head>
+<body>
+  <!--
+    Muy básica a propósito: el foco de esta sesión son structs y slices,
+    no la interfaz. Un textarea, un botón, y un poco de JavaScript que
+    llama al endpoint — nada de editor con numeración de líneas, pestañas
+    de reportes ni consola con estilos, que es lo que pide de verdad la
+    sección 3.1.2 del enunciado y les toca construir a ustedes.
+  -->
+  <h1>MiniPascal</h1>
+
+  <textarea id="codigo" rows="15" cols="70">program Demo;
+begin
+  var x: integer := 10;
+  writeln(x + 5);
+end.</textarea>
+  <br>
+  <button id="ejecutar">Ejecutar</button>
+
+  <h2>Salida</h2>
+  <pre id="salida"></pre>
+
+  <h2>Errores</h2>
+  <pre id="errores"></pre>
+
+  <script>
+    document.getElementById('ejecutar').addEventListener('click', async () => {
+      const codigo = document.getElementById('codigo').value;
+
+      const respuesta = await fetch('/api/interpretar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo }),
+      });
+      const datos = await respuesta.json();
+
+      document.getElementById('salida').textContent = datos.salida;
+      document.getElementById('errores').textContent = datos.errores
+        .map(e => `[${e.tipo}] Línea ${e.linea}, Columna ${e.columna}: ${e.descripcion}`)
+        .join('\n');
+    });
+  </script>
+</body>
+</html>
