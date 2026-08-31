@@ -18,8 +18,8 @@ function(){
         {
             value:
 `int a = 10
-
-print(a)
+int b = 5
+print(a + b)
 `,
             language: "python",
             theme: "vs-dark",
@@ -32,6 +32,9 @@ print(a)
 
 async function compileCode(){
 
+    const mode = document.getElementById("mode-select").value;
+    const builder = document.getElementById("builder-select").value;
+
     const response = await fetch(
         "/compile",
         {
@@ -40,7 +43,9 @@ async function compileCode(){
                 "Content-Type":"application/json"
             },
             body: JSON.stringify({
-                code: editor.getValue()
+                code: editor.getValue(),
+                mode: mode,
+                builder: builder
             })
         }
     );
@@ -62,10 +67,33 @@ async function compileCode(){
     });
 
 
-    document.getElementById("output").textContent =
-        [
-            ...data.output,
-            ...formattedErrors
-        ].join("\n");
+    const output = [
+        ...data.output,
+        ...formattedErrors
+    ].join("\n");
 
+
+    document.getElementById("output").textContent = output;
+    
+    const copyBtn = document.getElementById("copy-btn");
+    copyBtn.disabled = !output.trim();
+
+}
+
+
+async function copyOutput(){
+    const output = document.getElementById("output").textContent;
+    if (!output.trim()) return;
+    
+    try {
+        await navigator.clipboard.writeText(output);
+        const btn = document.getElementById("copy-btn");
+        const originalText = btn.textContent;
+        btn.textContent = "✓ Copiado";
+        setTimeout(() => {
+            btn.textContent = originalText;
+        }, 1500);
+    } catch (err) {
+        console.error("Error al copiar:", err);
+    }
 }
