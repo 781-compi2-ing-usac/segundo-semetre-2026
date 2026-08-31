@@ -73,19 +73,7 @@ class TypeChecker(Visitor):
                 self.error(f"Invalid type for comparison operation: {left_type}", node)
             return "bool"
 
-        return left_type
-        if node.op in comparison_ops:
-            if left_type != right_type:
-                self.errors.append(
-                    f"Type mismatch in comparison operation: {left_type} and {right_type}"
-                )
-            if left_type not in ["int", "float"]:
-                self.errors.append(
-                    f"Invalid type for comparison operation: {left_type}"
-                )
-            return "bool"
-
-        return left_type
+        return left_type        
 
     def visit_declaration(self, node: DeclarationNode):
         var_type = self.dispatch(node.var_type)
