@@ -43,3 +43,8 @@ class Builder(ABC):
     def build_return(self):
         """Soporte para ReturnNode."""
         pass
+
+    @abstractmethod
+    def build_print(self, value: str, type_name: str):
+        """Imprimir valor según el tipo."""
+        pass

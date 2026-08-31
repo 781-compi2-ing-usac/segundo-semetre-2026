@@ -1,6 +1,6 @@
 # Interprete - Documentacion Completa
 
-Este repositorio implementa un interprete con analisis semantico de tipos para un lenguaje de programacion propio. El sistema se divide en tres componentes principales: la gramatica (lexer + parser), el verificador de tipos (typechecker) y el interprete.
+Este repositorio implementa un interprete con analisis semantico de tipos para un lenguaje de programacion propio. El sistema se divide en cuatro componentes principales: la gramatica (lexer + parser), el verificador de tipos (typechecker), el interprete y el compilador a LLVM IR.
 
 ---
 
@@ -358,3 +358,157 @@ Pasos detallados:
 ### Uso desde la interfaz
 
 La aplicacion Flask sirve una pagina HTML en `GET /` (template `templates/index.html`) que contiene un editor de codigo. El usuario escribe codigo en el lenguaje, lo envia al endpoint `/compile`, y la respuesta se muestra en pantalla con los errores y la salida.
+
+---
+
+## 6. Compilador a LLVM IR
+
+El compilador (`AST/Visitor/compiler.py`) genera codigo LLVM IR a partir del AST despues de que el typechecker valida los tipos. Utiliza el patron Builder (`AST/Builder/tac_builder.py`) para construir las instrucciones de tres direcciones (TAC).
+
+### 6.1 Instalacion de dependencias para LLVM
+
+Para compilar y ejecutar el LLVM IR generado en arquitectura ARM64, necesitas instalar las siguientes herramientas:
+
+```bash
+# En Ubuntu/Debian
+sudo apt update
+sudo apt install -y llvm qemu-user gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+```
+
+**Herramientas instaladas:**
+
+| Herramienta | Descripcion |
+|-------------|-------------|
+| `llvm` | Compilador LLVM (incluye `llc` para generar assembly) |
+| `qemu-user` | Emulador QEMU para ejecutar binarios ARM64 |
+| `gcc-aarch64-linux-gnu` | Cross-compiler GCC para ARM64 |
+| `binutils-aarch64-linux-gnu` | Herramientas de binutils (assembler, linker) para ARM64 |
+
+### 6.2 Mini tutorial: Compilar y ejecutar LLVM IR
+
+1. **Generar el codigo LLVM IR** desde la interfaz web o API:
+   ```bash
+   curl -X POST http://localhost:5000/compile \
+     -H "Content-Type: application/json" \
+     -d '{"code": "int x = 5\nprint(x + 3)"}'
+   ```
+
+2. **Guardar la salida** en un archivo `.ll`:
+   ```bash
+   echo '<codigo LLVM IR>' > programa.ll
+   ```
+
+3. **Compilar con el script** `LLVM/build.sh`:
+   ```bash
+   ./LLVM/build.sh programa.ll
+   ```
+
+   El script realiza 4 pasos:
+   - `llc`: Convierte LLVM IR a assembly ARM64
+   - `as`: Ensambla el codigo a objeto
+   - `gcc`: Linkea el objeto a ejecutable
+   - `qemu`: Ejecuta el binario con QEMU
+
+### 6.3 Clases del compilador
+
+#### `Compiler` (`AST/Visitor/compiler.py`)
+
+El `Compiler` es un visitor que recorre el AST y utiliza un `TACBuilder` para generar LLVM IR.
+
+| Metodo | Nodo | Accion |
+|--------|------|--------|
+| `visit_primitive` | `PrimitiveNode` | Retorna el valor literal (ej: `5`, `3.14`) |
+| `visit_variable` | `VariableNode` | Genera `load` desde el puntero de la variable |
+| `visit_binary_op` | `BinaryOpNode` | Genera instruccion aritmetica (`add`, `sub`, `mul`, `sdiv` para int; `fadd`, `fsub`, `fmul`, `fdiv` para float) |
+| `visit_declaration` | `DeclarationNode` | Genera `alloca` para reservar espacio + `store` si hay inicializacion |
+| `visit_assignment` | `AssignmentNode` | Genera `store` para actualizar la variable |
+| `visit_print` | `PrintNode` | Genera llamada a `printf` con el formato apropiado segun el tipo |
+| `visit_block` | `BlockNode` | Visita cada statement en secuencia |
+
+#### `TACBuilder` (`AST/Builder/tac_builder.py`)
+
+El `TACBuilder` implementa el patron Builder para generar instrucciones LLVM IR.
+
+| Metodo | Descripcion |
+|--------|-------------|
+| `new_temp()` | Genera un nuevo temporal (`%t1`, `%t2`, ...) |
+| `emit(instruction)` | Agrega una instruccion al codigo |
+| `emit_global(declaration)` | Agrega una declaracion global (format strings) |
+| `get_type_llvm(type_name)` | Convierte tipos del lenguaje a LLVM (`int` → `i32`, `float` → `double`, `bool` → `i1`) |
+| `emit_main_header()` | Genera el header de `main()` con declaraciones de printf y formatos |
+| `emit_main_footer()` | Genera el footer con `ret i32 0` |
+| `emit_alloca(var_name, type)` | Genera `alloca` para variable y retorna el puntero |
+| `build_arithmetic(op, rd, rs1, rs2, type)` | Genera instruccion aritmetica |
+| `build_memory_store(rd, base, type)` | Genera `store` |
+| `build_memory_load(rd, base, type)` | Genera `load` |
+| `build_print(value, type)` | Genera llamada a `printf` segun el tipo |
+
+#### `ARMBuilder` (`AST/Builder/arm_builder.py`)
+
+El `ARMBuilder` implementa el mismo patron Builder pero para generar codigo ensamblador ARM. Actualmente todos sus metodos lanzan `NotImplementedError` ya que esta en desarrollo. La interfaz es identica a `TACBuilder`, lo que permite intercambiar builders sin modificar el `Compiler`.
+
+### 6.4 Manejo de entornos a bajo nivel
+
+El compilador maneja las variables mediante punteros en memoria:
+
+1. **Declaracion de variable** (`int x = 5`):
+   ```llvm
+   %x_ptr = alloca i32          ; Reserva 4 bytes en el stack
+   store i32 5, ptr %x_ptr      ; Guarda el valor 5
+   ```
+
+2. **Uso de variable** (`print(x + 3)`):
+   ```llvm
+   %t1 = load i32, ptr %x_ptr   ; Carga el valor de x
+   %t2 = add i32 %t1, 3         ; Suma 3
+   call i32 (ptr, ...) @printf(ptr @.fmt_int, i32 %t2)
+   ```
+
+3. **Format strings globales**:
+   ```llvm
+   @.fmt_int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
+   @.fmt_float = private unnamed_addr constant [4 x i8] c"%f\0A\00"
+   @.fmt_bool = private unnamed_addr constant [4 x i8] c"%d\0A\00"
+   ```
+
+### 6.5 Ejemplo: Operaciones aritméticas
+
+Codigo fuente:
+```
+int x = 10
+int y = 5
+print(x + y)
+print(x * y)
+```
+
+LLVM IR generado:
+```llvm
+@.fmt_int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
+@.fmt_float = private unnamed_addr constant [4 x i8] c"%f\0A\00"
+@.fmt_bool = private unnamed_addr constant [4 x i8] c"%d\0A\00"
+
+declare i32 @printf(ptr, ...)
+
+define i32 @main() {
+entry:
+    %x_ptr = alloca i32
+    store i32 10, ptr %x_ptr
+    %y_ptr = alloca i32
+    store i32 5, ptr %y_ptr
+    %t1 = load i32, ptr %x_ptr
+    %t2 = load i32, ptr %y_ptr
+    %t3 = add i32 %t1, %t2
+    call i32 (ptr, ...) @printf(ptr @.fmt_int, i32 %t3)
+    %t4 = load i32, ptr %x_ptr
+    %t5 = load i32, ptr %y_ptr
+    %t6 = mul i32 %t4, %t5
+    call i32 (ptr, ...) @printf(ptr @.fmt_int, i32 %t6)
+    ret i32 0
+}
+```
+
+Salida al ejecutar:
+```
+15
+50
+```

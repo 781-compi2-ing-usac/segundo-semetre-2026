@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify
 
 from myparser import parser
 from AST.Visitor.typechecker import TypeChecker
+from AST.Visitor.compiler import Compiler
 from AST.errors import CompilerError, ParseError
 
 
@@ -41,13 +42,32 @@ def compile():
             response["errors"] = [e.to_dict() for e in checker.errors]
             return jsonify(response)        
 
-        response["output"] = []
+    except CompilerError as e:
+        response["errors"].append(e.to_dict())
+        return jsonify(response)
+
+    except Exception as e:
+        response["errors"].append({"phase": "typecheck", "message": str(e)})
+        return jsonify(response)
+
+    try:
+        compiler = Compiler()
+
+        for node in ast:
+            compiler.dispatch(node)
+
+        if compiler.errors:
+            response["errors"] = [e.to_dict() for e in compiler.errors]
+            return jsonify(response)
+
+        llvm_ir = compiler.get_code()
+        response["output"] = [llvm_ir]
 
     except CompilerError as e:
         response["errors"].append(e.to_dict())
 
     except Exception as e:
-        response["errors"].append({"phase": "unknown", "message": str(e)})
+        response["errors"].append({"phase": "compile", "message": str(e)})
 
     return jsonify(response)
 
