@@ -44,6 +44,12 @@ class TACBuilder(Builder):
         code = "\n".join(self.instructions)
         return f"{globals_str}\n\n{code}"
     
+    def emit_alloca(self, var_name: str, type_name: str = "int") -> str:
+        llvm_type = self.get_type_llvm(type_name)
+        ptr_name = f"%{var_name}_ptr"
+        self.emit(f"    {ptr_name} = alloca {llvm_type}")
+        return ptr_name
+    
     def build_arithmetic(self, op: str, rd: str, rs1: str, rs2: str, type_name: str = "int"):
         llvm_type = self.get_type_llvm(type_name)
         
@@ -81,15 +87,6 @@ class TACBuilder(Builder):
     
     def build_return(self):
         raise NotImplementedError("Return no implementado en esta versión básica")
-    
-    def emit_alloca(self, var_name: str, type_name: str = "int") -> str:
-        llvm_type = self.get_type_llvm(type_name)
-        ptr_name = f"%{var_name}_ptr"
-        self.emit(f"    {ptr_name} = alloca {llvm_type}")
-        return ptr_name
-    
-    def emit_printf(self, format_global: str, value: str, type_name: str = "int"):
-        self.emit(f"    call i32 (ptr, ...) @printf(ptr {format_global}, i32 {value})")
     
     def build_print(self, value: str, type_name: str):
         if type_name == "int":

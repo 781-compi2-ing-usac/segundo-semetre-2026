@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, jsonify
 from myparser import parser
 from AST.Visitor.typechecker import TypeChecker
 from AST.Visitor.compiler import Compiler
+from AST.Builder.tac_builder import TACBuilder
 from AST.errors import CompilerError, ParseError
 
 
@@ -51,7 +52,8 @@ def compile():
         return jsonify(response)
 
     try:
-        compiler = Compiler()
+        builder = TACBuilder()
+        compiler = Compiler(builder)
 
         for node in ast:
             compiler.dispatch(node)

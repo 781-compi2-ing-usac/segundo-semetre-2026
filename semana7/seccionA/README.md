@@ -363,28 +363,24 @@ La aplicacion Flask sirve una pagina HTML en `GET /` (template `templates/index.
 
 ## 6. Compilador a LLVM IR
 
-El compilador (`AST/Visitor/compiler.py`) genera codigo LLVM IR a partir del AST despues de que el typechecker valida los tipos. Utiliza el patron Builder (`AST/Builder/tac_builder.py`) para construir las instrucciones de tres direcciones (TAC).
+El compilador (`AST/Visitor/compiler.py`) genera codigo LLVM IR o ensamblador ARM64 a partir del AST despues de que el typechecker valida los tipos. Utiliza el patron Builder para construir las instrucciones, permitiendo intercambiar el backend de generacion de codigo.
 
-### 6.1 Instalacion de dependencias para LLVM
+### 6.1 Instalacion de dependencias
 
-Para compilar y ejecutar el LLVM IR generado en arquitectura ARM64, necesitas instalar las siguientes herramientas:
-
+**Para LLVM IR (archivo .ll):**
 ```bash
-# En Ubuntu/Debian
 sudo apt update
 sudo apt install -y llvm qemu-user gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
 ```
 
-**Herramientas instaladas:**
+**Para ARM64 (archivo .asm):**
+```bash
+sudo apt install -y qemu-user binutils-aarch64-linux-gnu
+```
 
-| Herramienta | Descripcion |
-|-------------|-------------|
-| `llvm` | Compilador LLVM (incluye `llc` para generar assembly) |
-| `qemu-user` | Emulador QEMU para ejecutar binarios ARM64 |
-| `gcc-aarch64-linux-gnu` | Cross-compiler GCC para ARM64 |
-| `binutils-aarch64-linux-gnu` | Herramientas de binutils (assembler, linker) para ARM64 |
+### 6.2 Mini tutorial: Compilar y ejecutar
 
-### 6.2 Mini tutorial: Compilar y ejecutar LLVM IR
+#### Opcion A: LLVM IR
 
 1. **Generar el codigo LLVM IR** desde la interfaz web o API:
    ```bash
@@ -407,6 +403,41 @@ sudo apt install -y llvm qemu-user gcc-aarch64-linux-gnu binutils-aarch64-linux-
    - `llc`: Convierte LLVM IR a assembly ARM64
    - `as`: Ensambla el codigo a objeto
    - `gcc`: Linkea el objeto a ejecutable
+   - `qemu`: Ejecuta el binario con QEMU
+
+#### Opcion B: ARM64 directo
+
+1. **Generar el codigo ensamblador** desde Python:
+   ```python
+   from myparser import parser
+   from AST.Visitor.typechecker import TypeChecker
+   from AST.Visitor.compiler import Compiler
+   from AST.Builder.arm_builder import ARMBuilder
+
+   code = 'int x = 10\nint y = 5\nprint(x + y)'
+   ast = parser.parse(code)
+   
+   checker = TypeChecker()
+   for node in ast:
+       checker.dispatch(node)
+   
+   builder = ARMBuilder()
+   compiler = Compiler(builder)
+   for node in ast:
+       compiler.dispatch(node)
+   
+   with open('programa.asm', 'w') as f:
+       f.write(compiler.get_code())
+   ```
+
+2. **Compilar con el script** `ARM/build.sh`:
+   ```bash
+   ./ARM/build.sh programa.asm
+   ```
+
+   El script realiza 3 pasos:
+   - `as`: Ensambla el codigo a objeto
+   - `ld`: Linkea el objeto a ejecutable
    - `qemu`: Ejecuta el binario con QEMU
 
 ### 6.3 Clases del compilador
@@ -445,7 +476,120 @@ El `TACBuilder` implementa el patron Builder para generar instrucciones LLVM IR.
 
 #### `ARMBuilder` (`AST/Builder/arm_builder.py`)
 
-El `ARMBuilder` implementa el mismo patron Builder pero para generar codigo ensamblador ARM. Actualmente todos sus metodos lanzan `NotImplementedError` ya que esta en desarrollo. La interfaz es identica a `TACBuilder`, lo que permite intercambiar builders sin modificar el `Compiler`.
+El `ARMBuilder` implementa el mismo patron Builder pero para generar codigo ensamblador ARM64.
+
+| Metodo | Descripcion |
+|--------|-------------|
+| `emit_main_header()` | Genera `.global _start`, seccion `.bss` para buffer, y prologo con `stp`/`mov` para frame pointer |
+| `emit_main_footer()` | Genera syscall `exit(0)` y la rutina `itoa` para convertir enteros a string |
+| `emit_alloca(var_name, type)` | Reserva espacio usando offsets desde el Frame Pointer (x29) |
+| `build_arithmetic(op, rd, rs1, rs2, type)` | Genera `add`, `sub`, `mul`, `sdiv` |
+| `build_memory_store(rd, base, offset, type)` | Genera `str` con offset desde FP |
+| `build_memory_load(rd, base, offset, type)` | Genera `ldr` con offset desde FP |
+| `build_print(value, type)` | Usa rutina `itoa` + syscall `write(64)` para imprimir |
+
+**Registros ARM64 utilizados:**
+
+| Registro | Nombre | Uso |
+|----------|--------|-----|
+| x0-x7 | A0-A7 | Argumentos / temporales |
+| x8 | SYS | Numero de syscall |
+| x9-x15 | T0-T6 | Temporales |
+| x19-x28 | S1-S10 | Saved registers |
+| x29 | FP | Frame Pointer |
+| x30 | RA | Return Address |
+| sp | SP | Stack Pointer |
+
+**Syscalls utilizados:**
+
+| Numero | Syscall | Uso |
+|--------|---------|-----|
+| 64 | write | Imprimir a stdout |
+| 93 | exit | Terminar programa |
+
+**Manejo de variables:**
+
+Las variables se almacenan en el stack usando offsets negativos desde el Frame Pointer:
+```asm
+// Declaracion: int x = 10
+mov x9, #10              // Cargar literal en registro
+str x9, [x29, #-8]       // Almacenar en [FP-8]
+
+// Uso: print(x)
+ldr x10, [x29, #-8]      // Cargar desde [FP-8]
+```
+
+#### Intercambio de Builders
+
+El `Compiler` acepta cualquier `Builder` en su constructor, permitiendo intercambiar el backend de generacion de codigo:
+
+```python
+from AST.Visitor.compiler import Compiler
+from AST.Builder.tac_builder import TACBuilder
+from AST.Builder.arm_builder import ARMBuilder
+
+# Para LLVM IR
+builder = TACBuilder()
+compiler = Compiler(builder)
+
+# Para ARM64
+builder = ARMBuilder()
+compiler = Compiler(builder)
+```
+
+**Compilar y ejecutar ARM64:**
+
+```bash
+# Generar el archivo .asm desde Python
+python3 -c "
+from myparser import parser
+from AST.Visitor.typechecker import TypeChecker
+from AST.Visitor.compiler import Compiler
+from AST.Builder.arm_builder import ARMBuilder
+
+code = 'int x = 10\nprint(x + 5)'
+ast = parser.parse(code)
+checker = TypeChecker()
+for node in ast:
+    checker.dispatch(node)
+
+builder = ARMBuilder()
+compiler = Compiler(builder)
+for node in ast:
+    compiler.dispatch(node)
+
+with open('programa.asm', 'w') as f:
+    f.write(compiler.get_code())
+"
+
+# Compilar y ejecutar
+./ARM/build.sh programa.asm
+```
+
+**Requisitos para ARM64:**
+```bash
+sudo apt install -y qemu-user gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+```
+
+#### Soporte para Floats en ARM
+
+Actualmente el `ARMBuilder` solo soporta `int`. Para agregar soporte de `float`:
+
+**Dificultad estimada:** Media
+
+**Cambios necesarios:**
+1. Usar registros de punto flotante (`d0`-`d31`) en lugar de `x0`-`x30`
+2. Instrucciones `fadd`, `fsub`, `fmul`, `fdiv` en lugar de `add`, `sub`, `mul`, `sdiv`
+3. Implementar rutina `ftoa` (float to ASCII) mas compleja que `itoa`
+4. Manejar precision doble (64 bits) con registros `d` (double)
+
+**Ejemplo de codigo ARM para float:**
+```asm
+// fadd d0, d1, d2  (suma de doubles)
+// fdiv d0, d1, d2  (division de doubles)
+```
+
+Por ahora, si se intenta compilar codigo con `float` usando `ARMBuilder`, se lanzara `NotImplementedError`.
 
 ### 6.4 Manejo de entornos a bajo nivel
 

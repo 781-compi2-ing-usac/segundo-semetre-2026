@@ -1,5 +1,5 @@
 from AST.Visitor.visitor import Visitor
-from AST.Builder.tac_builder import TACBuilder
+from AST.Builder.builder import Builder
 from AST.nodes import *
 from AST.errors import CompilerError
 
@@ -7,9 +7,9 @@ from AST.errors import CompilerError
 class Compiler(Visitor):
     _phase = "compile"
 
-    def __init__(self):
+    def __init__(self, builder: Builder):
         super().__init__()
-        self.builder = TACBuilder()
+        self.builder = builder
         self.symbol_table = {}
         self.builder.emit_main_header()
 
@@ -36,10 +36,10 @@ class Compiler(Visitor):
                 phase=self._phase
             )
         var_info = self.symbol_table[node.name]
-        ptr = var_info["ptr"]
+        base = var_info["base"]
         type_name = var_info["type"]
         temp = self.builder.new_temp()
-        self.builder.build_memory_load(temp, ptr, type_name=type_name)
+        self.builder.build_memory_load(temp, base, type_name=type_name)
         return temp
 
     def visit_binary_op(self, node: BinaryOpNode):
@@ -54,12 +54,12 @@ class Compiler(Visitor):
 
     def visit_declaration(self, node: DeclarationNode):
         type_name = self.dispatch(node.var_type)
-        ptr = self.builder.emit_alloca(node.var_name, type_name)
-        self.symbol_table[node.var_name] = {"ptr": ptr, "type": type_name}
+        base = self.builder.emit_alloca(node.var_name, type_name)
+        self.symbol_table[node.var_name] = {"base": base, "type": type_name}
         
         if node.expression:
             value = self.dispatch(node.expression)
-            self.builder.build_memory_store(value, ptr, type_name=type_name)
+            self.builder.build_memory_store(value, base, type_name=type_name)
         return None
 
     def visit_assignment(self, node: AssignmentNode):
@@ -71,7 +71,7 @@ class Compiler(Visitor):
             )
         value = self.dispatch(node.expression)
         var_info = self.symbol_table[node.var_name]
-        self.builder.build_memory_store(value, var_info["ptr"], type_name=var_info["type"])
+        self.builder.build_memory_store(value, var_info["base"], type_name=var_info["type"])
         return None
 
     def visit_block(self, node: BlockNode):

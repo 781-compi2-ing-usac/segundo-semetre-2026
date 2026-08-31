@@ -15,6 +15,21 @@ class Builder(ABC):
         return "\n".join(self.instructions)    
 
     @abstractmethod
+    def emit_main_header(self):
+        """Genera el encabezado del programa."""
+        pass
+
+    @abstractmethod
+    def emit_main_footer(self):
+        """Genera el footer del programa (exit/return)."""
+        pass
+
+    @abstractmethod
+    def emit_alloca(self, var_name: str, type_name: str) -> str:
+        """Reserva espacio para una variable y retorna su identificador/puntero."""
+        pass
+
+    @abstractmethod
     def build_arithmetic(self, op: str, rd: str, rs1: str, rs2: str):
         """Soporte para BinaryOpNode."""
         pass
