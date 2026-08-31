@@ -2,11 +2,7 @@ from flask import Flask, render_template, request, jsonify
 
 from myparser import parser
 from AST.Visitor.typechecker import TypeChecker
-from AST.Visitor.interpreter import Interpreter
 from AST.errors import CompilerError, ParseError
-
-from contextlib import redirect_stdout
-from io import StringIO
 
 
 app = Flask(__name__)
@@ -43,21 +39,9 @@ def compile():
 
         if checker.errors:
             response["errors"] = [e.to_dict() for e in checker.errors]
-            return jsonify(response)
+            return jsonify(response)        
 
-        interpreter = Interpreter()
-
-        output = StringIO()
-
-        with redirect_stdout(output):
-            for node in ast:
-                interpreter.dispatch(node)
-
-        if interpreter.errors:
-            response["errors"] = [e.to_dict() for e in interpreter.errors]
-            return jsonify(response)
-
-        response["output"] = output.getvalue().splitlines()
+        response["output"] = []
 
     except CompilerError as e:
         response["errors"].append(e.to_dict())
