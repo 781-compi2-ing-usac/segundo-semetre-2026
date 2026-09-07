@@ -47,33 +47,45 @@ class TypeChecker(Visitor):
 
         return accessed_type
 
-    def visit_binary_op(self, node: BinaryOpNode):
+    def visit_arith_op(self, node: ArithOpNode):
         left_type = self.dispatch(node.left)
         right_type = self.dispatch(node.right)
 
-        arithmetic_ops = ["+", "-", "*", "/"]
-        comparison_ops = ["<", ">", "<=", ">=", "=="]
+        if left_type != right_type:
+            self.error(
+                f"Type mismatch in arithmetic operation: {left_type} and {right_type}",
+                node,
+            )
+        if left_type not in ["int", "float"]:
+            self.error(f"Invalid type for arithmetic operation: {left_type}", node)
+        return left_type
 
-        if node.op in arithmetic_ops:
-            if left_type != right_type:
-                self.error(
-                    f"Type mismatch in binary operation: {left_type} and {right_type}",
-                    node,
-                )
-            if left_type not in ["int", "float"]:
-                self.error(f"Invalid type for arithmetic operation: {left_type}", node)
-            return left_type
-        if node.op in comparison_ops:
-            if left_type != right_type:
-                self.error(
-                    f"Type mismatch in comparison operation: {left_type} and {right_type}",
-                    node,
-                )
-            if left_type not in ["int", "float"]:
-                self.error(f"Invalid type for comparison operation: {left_type}", node)
-            return "bool"
+    def visit_rel_op(self, node: RelOpNode):
+        left_type = self.dispatch(node.left)
+        right_type = self.dispatch(node.right)
 
-        return left_type        
+        if left_type != right_type:
+            self.error(
+                f"Type mismatch in comparison operation: {left_type} and {right_type}",
+                node,
+            )
+        if left_type not in ["int", "float"]:
+            self.error(f"Invalid type for comparison operation: {left_type}", node)
+        return "bool"
+
+    def visit_logic_op(self, node: LogicOpNode):
+        left_type = self.dispatch(node.left)
+        right_type = self.dispatch(node.right)
+
+        if left_type != "bool":
+            self.error(
+                f"Left operand of '{node.op}' must be bool, got {left_type}", node
+            )
+        if right_type != "bool":
+            self.error(
+                f"Right operand of '{node.op}' must be bool, got {right_type}", node
+            )
+        return "bool"
 
     def visit_declaration(self, node: DeclarationNode):
         var_type = self.dispatch(node.var_type)

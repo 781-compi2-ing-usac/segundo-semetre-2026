@@ -46,7 +46,7 @@ class VariableNode(Node):
         return visitor.visit_variable(self)
 
 
-class BinaryOpNode(Node):
+class ArithOpNode(Node):
     def __init__(self, left, op, right, lineno=None):
         super().__init__(op, lineno)
         self.op = op
@@ -54,10 +54,38 @@ class BinaryOpNode(Node):
         self.right = right
 
     def __repr__(self):
-        return f"BinaryOpNode({self.left}, {self.value}, {self.right})"
+        return f"ArithOpNode({self.left}, {self.value}, {self.right})"
 
     def visit(self, visitor):
-        return visitor.visit_binary_op(self)
+        return visitor.visit_arith_op(self)
+
+
+class RelOpNode(Node):
+    def __init__(self, left, op, right, lineno=None):
+        super().__init__(op, lineno)
+        self.op = op
+        self.left = left
+        self.right = right
+
+    def __repr__(self):
+        return f"RelOpNode({self.left}, {self.value}, {self.right})"
+
+    def visit(self, visitor):
+        return visitor.visit_rel_op(self)
+
+
+class LogicOpNode(Node):
+    def __init__(self, left, op, right, lineno=None):
+        super().__init__(op, lineno)
+        self.op = op
+        self.left = left
+        self.right = right
+
+    def __repr__(self):
+        return f"LogicOpNode({self.left}, {self.value}, {self.right})"
+
+    def visit(self, visitor):
+        return visitor.visit_logic_op(self)
 
 
 class DeclarationNode(Node):

@@ -52,7 +52,15 @@ class Visitor(ABC):
         pass
 
     @abstractmethod
-    def visit_binary_op(self, node: BinaryOpNode):
+    def visit_arith_op(self, node: ArithOpNode):
+        pass
+
+    @abstractmethod
+    def visit_rel_op(self, node: RelOpNode):
+        pass
+
+    @abstractmethod
+    def visit_logic_op(self, node: LogicOpNode):
         pass
 
     @abstractmethod

@@ -30,24 +30,26 @@ El lexer convierte el texto fuente en una secuencia de tokens.
 
 #### Operadores y simbolos
 
-| Token    | Simbolo | Descripcion          |
-|----------|---------|----------------------|
-| `PLUS`   | `+`     | Suma                 |
-| `MINUS`  | `-`     | Resta                |
-| `TIMES`  | `*`     | Multiplicacion       |
-| `DIVIDE` | `/`     | Division             |
-| `LT`     | `<`     | Menor que            |
-| `GT`     | `>`     | Mayor que            |
-| `LE`     | `<=`    | Menor o igual que    |
-| `GE`     | `>=`    | Mayor o igual que    |
-| `EQ`     | `==`    | Igualdad             |
-| `EQUALS` | `=`     | Asignacion           |
-| `LPAREN` | `(`     | Parentesis izquierdo |
-| `RPAREN` | `)`     | Parentesis derecho   |
-| `LKEY`   | `{`     | Llave izquierda      |
-| `RKEY`   | `}`     | Llave derecha        |
-| `COLON`  | `:`     | Dos puntos           |
-| `COMMA`  | `,`     | Coma                 |
+| Token       | Simbolo | Descripcion          |
+|-------------|---------|----------------------|
+| `PLUS`      | `+`     | Suma                 |
+| `MINUS`     | `-`     | Resta                |
+| `TIMES`     | `*`     | Multiplicacion       |
+| `DIVIDE`    | `/`     | Division             |
+| `LT`        | `<`     | Menor que            |
+| `GT`        | `>`     | Mayor que            |
+| `LE`        | `<=`    | Menor o igual que    |
+| `GE`        | `>=`    | Mayor o igual que    |
+| `EQ`        | `==`    | Igualdad             |
+| `AMPERSAND` | `&`     | AND lógico           |
+| `PIPE`      | `\|`    | OR lógico            |
+| `EQUALS`    | `=`     | Asignacion           |
+| `LPAREN`    | `(`     | Parentesis izquierdo |
+| `RPAREN`    | `)`     | Parentesis derecho   |
+| `LKEY`      | `{`     | Llave izquierda      |
+| `RKEY`      | `}`     | Llave derecha        |
+| `COLON`     | `:`     | Dos puntos           |
+| `COMMA`     | `,`     | Coma                 |
 
 #### Identificadores y literales
 
@@ -84,7 +86,8 @@ args    : args COMMA E | E | (vacio)
 
 type    : INT | FLOAT | BOOL | VOID
 
-E       : E PLUS E | E MINUS E | E TIMES E | E DIVIDE E   (aritmetica)
+E       : E AMPERSAND E | E PIPE E                        (logica)
+        | E PLUS E | E MINUS E | E TIMES E | E DIVIDE E   (aritmetica)
         | E LT E | E GT E | E LE E | E GE E | E EQ E     (comparacion)
         | ID                                              (variable)
         | NUM                                             (literal numerico)
@@ -95,10 +98,11 @@ E       : E PLUS E | E MINUS E | E TIMES E | E DIVIDE E   (aritmetica)
 
 #### Precedencia de operadores (de menor a mayor)
 
-1. `==` (igualdad)
-2. `<`, `>`, `<=`, `>=` (comparacion)
-3. `+`, `-` (adicion/sustraccion)
-4. `*`, `/` (multiplicacion/division)
+1. `&`, `|` (operadores logicos)
+2. `==` (igualdad)
+3. `<`, `>`, `<=`, `>=` (comparacion)
+4. `+`, `-` (adicion/sustraccion)
+5. `*`, `/` (multiplicacion/division)
 
 Todos los operadores son **asociativos por izquierda**.
 
@@ -119,7 +123,9 @@ Clase abstracta base que define un metodo `visit_*` por cada tipo de nodo AST. T
 | `visit_type`                    | `TypeNode`                 | Retorna el string del tipo (`'int'`, `'float'`, `'bool'`, `'void'`)          |
 | `visit_primitive`               | `PrimitiveNode`            | Retorna el tipo del literal (`node.type`)                                    |
 | `visit_variable`                | `VariableNode`             | Busca el tipo en la tabla de simbolos. Error si no existe                    |
-| `visit_binary_op`               | `BinaryOpNode`             | Operaciones aritmeticas: ambos operandos deben ser `int`/`float` y del mismo tipo. Comparaciones: mismo requisito, retorna `'bool'` |
+| `visit_arith_op`                | `ArithOpNode`              | Operaciones aritmeticas: ambos operandos deben ser `int`/`float` y del mismo tipo. Retorna el tipo de los operandos |
+| `visit_rel_op`                  | `RelOpNode`                | Operaciones relacionales: ambos operandos deben ser `int`/`float` y del mismo tipo. Retorna `'bool'` |
+| `visit_logic_op`                | `LogicOpNode`              | Operaciones logicas (`&`, `\|`): ambos operandos deben ser `bool`. Retorna `'bool'` |
 | `visit_declaration`             | `DeclarationNode`          | El tipo declarado debe coincidir con el tipo de la expresion inicializadora  |
 | `visit_assignment`              | `AssignmentNode`           | La variable debe existir. El tipo de la expresion debe coincidir con el tipo de la variable |
 | `visit_block`                   | `BlockNode`                | Crea un nuevo scope. Visita cada statement                                   |
@@ -149,7 +155,9 @@ Cada bloque (`BlockNode`) crea un nuevo `SymTable` con `parent` apuntando al sco
 | `TypeNode`                | `value` (string del tipo)            | Representa un tipo (`int`, `float`, `bool`, `void`) |
 | `PrimitiveNode`           | `value`, `type`                      | Literal numerico o booleano                  |
 | `VariableNode`            | `name`                               | Referencia a una variable                    |
-| `BinaryOpNode`            | `left`, `op`, `right`                | Operacion binaria (aritmetica o comparacion) |
+| `ArithOpNode`             | `left`, `op`, `right`                | Operacion aritmetica (`+`, `-`, `*`, `/`)    |
+| `RelOpNode`               | `left`, `op`, `right`                | Operacion relacional (`<`, `>`, `<=`, `>=`, `==`) |
+| `LogicOpNode`             | `left`, `op`, `right`                | Operacion logica (`&`, `\|`)                 |
 | `DeclarationNode`         | `var_type`, `var_name`, `expression` | Declaracion con tipo e inicializacion opcional |
 | `AssignmentNode`          | `var_name`, `expression`             | Reasignacion de variable                     |
 | `BlockNode`               | `statements` (lista)                 | Bloque de sentencias entre `{}`              |
@@ -174,7 +182,9 @@ El interprete (`AST/Visitor/interpreter.py`) ejecuta el AST despues de que el ty
 | `visit_type`                    | `TypeNode`                 | Retorna el string del tipo                                                |
 | `visit_primitive`               | `PrimitiveNode`            | Retorna el valor Python (`int`, `float`, `bool`)                           |
 | `visit_variable`                | `VariableNode`             | Busca el valor en la tabla de simbolos                                    |
-| `visit_binary_op`               | `BinaryOpNode`             | Evalua `left` y `right`, aplica el operador: `+`, `-`, `*`, `/`, `<`, `>`, `<=`, `>=`, `==` |
+| `visit_arith_op`                | `ArithOpNode`              | Evalua `left` y `right`, aplica el operador: `+`, `-`, `*`, `/`           |
+| `visit_rel_op`                  | `RelOpNode`                | Evalua `left` y `right`, aplica el operador: `<`, `>`, `<=`, `>=`, `==`. Retorna `bool` |
+| `visit_logic_op`                | `LogicOpNode`              | Evalua `left` y `right`, aplica el operador: `&` (and), `\|` (or). Retorna `bool` |
 | `visit_declaration`             | `DeclarationNode`          | Evalua la expresion y registra el valor en la tabla. Si no hay expresion, registra `None` |
 | `visit_assignment`              | `AssignmentNode`           | Evalua la expresion y actualiza el valor en la tabla                      |
 | `visit_block`                   | `BlockNode`                | Crea un nuevo scope (`SymTable` hijo). Ejecuta cada statement. Si alguno retorna `FlowControl`, lo propaga hacia arriba |
@@ -450,10 +460,14 @@ El `Compiler` es un visitor que recorre el AST y utiliza un `TACBuilder` para ge
 |--------|------|--------|
 | `visit_primitive` | `PrimitiveNode` | Retorna el valor literal (ej: `5`, `3.14`) |
 | `visit_variable` | `VariableNode` | Genera `load` desde el puntero de la variable |
-| `visit_binary_op` | `BinaryOpNode` | Genera instruccion aritmetica (`add`, `sub`, `mul`, `sdiv` para int; `fadd`, `fsub`, `fmul`, `fdiv` para float) |
-| `visit_declaration` | `DeclarationNode` | Genera `alloca` para reservar espacio + `store` si hay inicializacion |
-| `visit_assignment` | `AssignmentNode` | Genera `store` para actualizar la variable |
-| `visit_print` | `PrintNode` | Genera llamada a `printf` con el formato apropiado segun el tipo |
+| `visit_arith_op` | `ArithOpNode` | Genera instruccion aritmetica (`add`, `sub`, `mul`, `sdiv` para int; `fadd`, `fsub`, `fmul`, `fdiv` para float) |
+| `visit_rel_op` | `RelOpNode` | Genera comparacion (`icmp`/`fcmp`) y branch condicional. Retorna listas de etiquetas `(ev_labels, ef_labels)` |
+| `visit_logic_op` | `LogicOpNode` | Para `&`: escribe EV izquierdo, evalua derecho, concatena EF. Para `\|`: escribe EF izquierdo, evalua derecho, concatena EV |
+| `visit_if` | `IfNode` | Escribe etiquetas EV, ejecuta bloque, escribe etiquetas EF con branches al final |
+| `visit_while` | `WhileNode` | Escribe etiqueta de inicio, evalua condicion, escribe etiquetas EV, ejecuta bloque, branch al inicio, escribe etiquetas EF |
+| `visit_declaration` | `DeclarationNode` | Genera `alloca` para reservar espacio + `store` si hay inicializacion. Si la expresion es RelOp/LogicOp, materializa a variable |
+| `visit_assignment` | `AssignmentNode` | Genera `store` para actualizar la variable. Si la expresion es RelOp/LogicOp, materializa a variable |
+| `visit_print` | `PrintNode` | Genera llamada a `printf` con el formato apropiado segun el tipo. Si la expresion es RelOp/LogicOp, materializa a print |
 | `visit_block` | `BlockNode` | Visita cada statement en secuencia |
 
 #### `TACBuilder` (`AST/Builder/tac_builder.py`)

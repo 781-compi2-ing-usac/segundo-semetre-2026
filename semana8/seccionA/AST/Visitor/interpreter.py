@@ -39,7 +39,7 @@ class Interpreter(Visitor):
         except ArrayAccessError as e:
             raise RuntimeError_(str(e), node=node)
 
-    def visit_binary_op(self, node: BinaryOpNode):
+    def visit_arith_op(self, node: ArithOpNode):
         left_value = self.dispatch(node.left)
         right_value = self.dispatch(node.right)
         if node.op == "+":
@@ -50,7 +50,13 @@ class Interpreter(Visitor):
             return left_value * right_value
         elif node.op == "/":
             return left_value / right_value
-        elif node.op == "<":
+        else:
+            raise RuntimeError_(f"Unknown arithmetic operator: {node.op}", node=node)
+
+    def visit_rel_op(self, node: RelOpNode):
+        left_value = self.dispatch(node.left)
+        right_value = self.dispatch(node.right)
+        if node.op == "<":
             return left_value < right_value
         elif node.op == ">":
             return left_value > right_value
@@ -61,7 +67,17 @@ class Interpreter(Visitor):
         elif node.op == "==":
             return left_value == right_value
         else:
-            raise RuntimeError_(f"Unknown binary operator: {node.op}", node=node)
+            raise RuntimeError_(f"Unknown relational operator: {node.op}", node=node)
+
+    def visit_logic_op(self, node: LogicOpNode):
+        left_value = self.dispatch(node.left)
+        right_value = self.dispatch(node.right)
+        if node.op == "&":
+            return left_value and right_value
+        elif node.op == "|":
+            return left_value or right_value
+        else:
+            raise RuntimeError_(f"Unknown logic operator: {node.op}", node=node)
 
     def visit_declaration(self, node: DeclarationNode):
         if node.expression:

@@ -33,22 +33,28 @@ args : args COMMA E
 
 type : int | float | bool
 
-E : E LT E
-    | E GT E
-    | E LE E
-    | E GE E
-    | E EQ E
-    | E PLUS E
-    | E MINUS E
-    | E TIMES E
-    | E DIVIDE E
-    | ID braces
-    | NUM
-    | TRUE
-    | FALSE
-    | LPAREN E RPAREN
-    | ID LPAREN args RPAREN
-    | LBRACE array RBRACE
+E : E AMPERSAND E
+  | E PIPE E
+  | E_REL
+
+E_REL : E_REL LT E_REL
+      | E_REL GT E_REL
+      | E_REL LE E_REL
+      | E_REL GE E_REL
+      | E_REL EQ E_REL
+      | E_ARITH
+
+E_ARITH : E_ARITH PLUS E_ARITH
+        | E_ARITH MINUS E_ARITH
+        | E_ARITH TIMES E_ARITH
+        | E_ARITH DIVIDE E_ARITH
+        | ID braces
+        | NUM
+        | TRUE
+        | FALSE
+        | LPAREN E RPAREN
+        | ID LPAREN args RPAREN
+        | LBRACE array RBRACE
 
 braces : braces LBRACE E RBRACE
     | LBRACE E RBRACE
@@ -65,6 +71,7 @@ from AST.nodes import *
 
 # precedence rules for the arithmetic operators
 precedence = (
+    ("left", "AMPERSAND"),
     ("left", "EQ"),
     ("left", "LT", "GT", "LE", "GE"),
     ("left", "PLUS", "MINUS"),
@@ -209,52 +216,68 @@ def p_type_void(p):
     p[0] = TypeNode("void", lineno=p.lineno(1))
 
 
-def p_E_binop(p):
-    """E : E PLUS E
-    | E MINUS E
-    | E TIMES E
-    | E DIVIDE E"""
-    p[0] = BinaryOpNode(p[1], p[2], p[3], lineno=p.lineno(2))
+def p_E_logic(p):
+    """E : E AMPERSAND E
+    | E PIPE E"""
+    p[0] = LogicOpNode(p[1], p[2], p[3], lineno=p.lineno(2))
 
 
-def p_E_comparison(p):
-    """E : E LT E
-    | E GT E
-    | E LE E
-    | E GE E
-    | E EQ E"""
-    p[0] = BinaryOpNode(p[1], p[2], p[3], lineno=p.lineno(2))
+def p_E_rel(p):
+    "E : E_REL"
+    p[0] = p[1]
 
 
-def p_E_id(p):
-    "E : ID braces"
+def p_E_REL_binop(p):
+    """E_REL : E_REL LT E_REL
+    | E_REL GT E_REL
+    | E_REL LE E_REL
+    | E_REL GE E_REL
+    | E_REL EQ E_REL"""
+    p[0] = RelOpNode(p[1], p[2], p[3], lineno=p.lineno(2))
+
+
+def p_E_REL_arith(p):
+    "E_REL : E_ARITH"
+    p[0] = p[1]
+
+
+def p_E_ARITH_binop(p):
+    """E_ARITH : E_ARITH PLUS E_ARITH
+    | E_ARITH MINUS E_ARITH
+    | E_ARITH TIMES E_ARITH
+    | E_ARITH DIVIDE E_ARITH"""
+    p[0] = ArithOpNode(p[1], p[2], p[3], lineno=p.lineno(2))
+
+
+def p_E_ARITH_id(p):
+    "E_ARITH : ID braces"
     p[0] = VariableNode(p[1], p[2], lineno=p.lineno(1))
 
 
-def p_E_num(p):
-    "E : NUM"
+def p_E_ARITH_num(p):
+    "E_ARITH : NUM"
     p_type = "float" if isinstance(p[1], float) else "int"
     p[0] = PrimitiveNode(p[1], p_type, lineno=p.lineno(1))
 
 
-def p_E_true(p):
-    """E : TRUE
+def p_E_ARITH_true(p):
+    """E_ARITH : TRUE
     | FALSE"""
     p[0] = PrimitiveNode(p[1], "bool", lineno=p.lineno(1))
 
 
-def p_E_group(p):
-    "E : LPAREN E RPAREN"
+def p_E_ARITH_group(p):
+    "E_ARITH : LPAREN E RPAREN"
     p[0] = p[2]
 
 
-def p_E_function_call(p):
-    "E : ID LPAREN args RPAREN"
+def p_E_ARITH_function_call(p):
+    "E_ARITH : ID LPAREN args RPAREN"
     p[0] = FunctionCallNode(p[1], p[3], lineno=p.lineno(1))
 
 
-def p_E_array(p):
-    "E : LBRACE array RBRACE"
+def p_E_ARITH_array(p):
+    "E_ARITH : LBRACE array RBRACE"
     p[0] = ArrayNode(p[2], lineno=p.lineno(1))
 
 

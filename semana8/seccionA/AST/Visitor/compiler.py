@@ -31,9 +31,7 @@ class Compiler(Visitor):
     def visit_variable(self, node: VariableNode):
         if node.name not in self.symbol_table:
             raise CompilerError(
-                f"Undefined variable: {node.name}",
-                node=node,
-                phase=self._phase
+                f"Undefined variable: {node.name}", node=node, phase=self._phase
             )
         var_info = self.symbol_table[node.name]
         base = var_info["base"]
@@ -42,36 +40,105 @@ class Compiler(Visitor):
         self.builder.build_memory_load(temp, base, type_name=type_name)
         return temp
 
-    def visit_binary_op(self, node: BinaryOpNode):
+    def visit_arith_op(self, node: ArithOpNode):
         left = self.dispatch(node.left)
         right = self.dispatch(node.right)
-        
+
         left_type = self._get_expr_type(node.left)
-        
+
         temp = self.builder.new_temp()
         self.builder.build_arithmetic(node.op, temp, left, right, type_name=left_type)
         return temp
+
+    def visit_rel_op(self, node: RelOpNode):
+        left = self.dispatch(node.left)
+        right = self.dispatch(node.right)
+
+        left_type = self._get_expr_type(node.left)
+
+        cond_temp = self.builder.new_temp()
+        self.builder.build_comparison(
+            node.op, cond_temp, left, right, type_name=left_type
+        )
+
+        ev_label = self.builder.new_label()
+        ef_label = self.builder.new_label()
+        self.builder.build_branch_cond(cond_temp, ev_label, ef_label)
+
+        return ([ev_label], [ef_label])
+
+    def visit_logic_op(self, node: LogicOpNode):
+        if node.op == "&":
+            left_ev, left_ef = self.dispatch(node.left)
+
+            for ev_label in left_ev:
+                self.builder.emit_label(ev_label)
+
+            right_ev, right_ef = self.dispatch(node.right)
+
+            return (right_ev, left_ef + right_ef)
+
+        elif node.op == "|":
+            left_ev, left_ef = self.dispatch(node.left)
+
+            for ef_label in left_ef:
+                self.builder.emit_label(ef_label)
+
+            right_ev, right_ef = self.dispatch(node.right)
+
+            return (left_ev + right_ev, right_ef)
+
+        else:
+            raise NotImplementedError(f"Logic operator '{node.op}' not implemented")
+
+    def visit_if(self, node: IfNode):
+        ev_labels, ef_labels = self.dispatch(node.condition)
+
+        for ev_label in ev_labels:
+            self.builder.emit_label(ev_label)
+
+        self.dispatch(node.block)
+
+        end_label = self.builder.new_label()
+        self.builder.build_branch(end_label)
+
+        for ef_label in ef_labels:
+            self.builder.emit_label(ef_label)
+        self.builder.build_branch(end_label)
+
+        self.builder.emit_label(end_label)
+
+        return None
 
     def visit_declaration(self, node: DeclarationNode):
         type_name = self.dispatch(node.var_type)
         base = self.builder.emit_alloca(node.var_name, type_name)
         self.symbol_table[node.var_name] = {"base": base, "type": type_name}
-        
+
         if node.expression:
-            value = self.dispatch(node.expression)
-            self.builder.build_memory_store(value, base, type_name=type_name)
+            if isinstance(node.expression, (RelOpNode, LogicOpNode)):
+                self._materialize_to_variable(node.expression, base, type_name)
+            else:
+                value = self.dispatch(node.expression)
+                self.builder.build_memory_store(value, base, type_name=type_name)
         return None
 
     def visit_assignment(self, node: AssignmentNode):
         if node.var_name not in self.symbol_table:
             raise CompilerError(
-                f"Undefined variable: {node.var_name}",
-                node=node,
-                phase=self._phase
+                f"Undefined variable: {node.var_name}", node=node, phase=self._phase
             )
-        value = self.dispatch(node.expression)
         var_info = self.symbol_table[node.var_name]
-        self.builder.build_memory_store(value, var_info["base"], type_name=var_info["type"])
+
+        if isinstance(node.expression, (RelOpNode, LogicOpNode)):
+            self._materialize_to_variable(
+                node.expression, var_info["base"], var_info["type"]
+            )
+        else:
+            value = self.dispatch(node.expression)
+            self.builder.build_memory_store(
+                value, var_info["base"], type_name=var_info["type"]
+            )
         return None
 
     def visit_block(self, node: BlockNode):
@@ -80,19 +147,36 @@ class Compiler(Visitor):
         return None
 
     def visit_print(self, node: PrintNode):
-        value = self.dispatch(node.expression)
-        expr_type = self._get_expr_type(node.expression)
-        self.builder.build_print(value, expr_type)
+        if isinstance(node.expression, (RelOpNode, LogicOpNode)):
+            self._materialize_to_print(node.expression)
+        else:
+            value = self.dispatch(node.expression)
+            expr_type = self._get_expr_type(node.expression)
+            self.builder.build_print(value, expr_type)
         return None
 
-    def visit_if(self, node: IfNode):
-        raise NotImplementedError("If statement not implemented in basic version")
-
     def visit_while(self, node: WhileNode):
-        raise NotImplementedError("While statement not implemented in basic version")
+        loop_start = self.builder.new_label()
+        self.builder.emit_label(loop_start)
+
+        ev_labels, ef_labels = self.dispatch(node.condition)
+
+        for ev_label in ev_labels:
+            self.builder.emit_label(ev_label)
+
+        self.dispatch(node.block)
+
+        self.builder.build_branch(loop_start)
+
+        for ef_label in ef_labels:
+            self.builder.emit_label(ef_label)
+
+        return None
 
     def visit_function_declaration(self, node: FunctionDeclarationNode):
-        raise NotImplementedError("Function declaration not implemented in basic version")
+        raise NotImplementedError(
+            "Function declaration not implemented in basic version"
+        )
 
     def visit_function_call(self, node: FunctionCallNode):
         raise NotImplementedError("Function call not implemented in basic version")
@@ -113,6 +197,38 @@ class Compiler(Visitor):
             if node.name in self.symbol_table:
                 return self.symbol_table[node.name]["type"]
             return "int"
-        elif isinstance(node, BinaryOpNode):
+        elif isinstance(node, ArithOpNode):
             return self._get_expr_type(node.left)
         return "int"
+
+    def _materialize_to_variable(self, condition_node, base, type_name):
+        ev_labels, ef_labels = self.dispatch(condition_node)
+
+        for ev_label in ev_labels:
+            self.builder.emit_label(ev_label)
+        self.builder.build_memory_store(1, base, type_name=type_name)
+        end_label = self.builder.new_label()
+        self.builder.build_branch(end_label)
+
+        for ef_label in ef_labels:
+            self.builder.emit_label(ef_label)
+        self.builder.build_memory_store(0, base, type_name=type_name)
+        self.builder.build_branch(end_label)
+
+        self.builder.emit_label(end_label)
+
+    def _materialize_to_print(self, condition_node):
+        ev_labels, ef_labels = self.dispatch(condition_node)
+
+        for ev_label in ev_labels:
+            self.builder.emit_label(ev_label)
+        self.builder.build_print("1", "int")
+        end_label = self.builder.new_label()
+        self.builder.build_branch(end_label)
+
+        for ef_label in ef_labels:
+            self.builder.emit_label(ef_label)
+        self.builder.build_print("0", "int")
+        self.builder.build_branch(end_label)
+
+        self.builder.emit_label(end_label)

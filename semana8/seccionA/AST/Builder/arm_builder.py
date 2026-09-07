@@ -40,23 +40,25 @@ class ARMBuilder(Builder):
         self.temp_count = 0
         self.variables = {}
         self.offset_counter = 0
-    
+
     def new_temp(self) -> str:
         self.temp_count += 1
         return f"x{self.temp_count + 8}"
-    
+
     def emit(self, instruction: str):
         self.instructions.append(instruction)
-    
+
     def emit_main_header(self):
         self.emit(".global _start")
         self.emit(".section .bss")
         self.emit("buffer: .skip 32")
         self.emit(".section .text")
         self.emit("_start:")
-        self.emit(f"    stp {REGISTROS['FP']}, {REGISTROS['RA']}, [{REGISTROS['SP']}, #-16]!")
+        self.emit(
+            f"    stp {REGISTROS['FP']}, {REGISTROS['RA']}, [{REGISTROS['SP']}, #-16]!"
+        )
         self.emit(f"    mov {REGISTROS['FP']}, {REGISTROS['SP']}")
-    
+
     def emit_main_footer(self):
         self.emit("    // Exit syscall")
         self.emit(f"    mov {REGISTROS['A0']}, #0")
@@ -67,34 +69,39 @@ class ARMBuilder(Builder):
         self.emit("")
         self.emit(".section .rodata")
         self.emit('newline: .asciz "\\n"')
-    
+
     def emit_alloca(self, var_name: str, type_name: str = "int") -> str:
         if type_name == "float":
-            raise NotImplementedError("Float no soportado en ARMBuilder (versión básica)")
-        
+            raise NotImplementedError(
+                "Float no soportado en ARMBuilder (versión básica)"
+            )
+
         self.offset_counter += 8
         offset = -self.offset_counter
         self.variables[var_name] = {"offset": offset, "type": type_name}
         return var_name
-    
-    def build_arithmetic(self, op: str, rd: str, rs1: str, rs2: str, type_name: str = "int"):
+
+    def build_arithmetic(
+        self, op: str, rd: str, rs1: str, rs2: str, type_name: str = "int"
+    ):
         if type_name == "float":
-            raise NotImplementedError("Float no soportado en ARMBuilder (versión básica)")
-        
-        op_map = {
-            "+": "add",
-            "-": "sub",
-            "*": "mul",
-            "/": "sdiv"
-        }
-        
+            raise NotImplementedError(
+                "Float no soportado en ARMBuilder (versión básica)"
+            )
+
+        op_map = {"+": "add", "-": "sub", "*": "mul", "/": "sdiv"}
+
         arm_op = op_map.get(op, "add")
         self.emit(f"    {arm_op} {rd}, {rs1}, {rs2}")
-    
-    def build_memory_store(self, rd: str, base: str, offset: int = 0, type_name: str = "int"):
+
+    def build_memory_store(
+        self, rd: str, base: str, offset: int = 0, type_name: str = "int"
+    ):
         if type_name == "float":
-            raise NotImplementedError("Float no soportado en ARMBuilder (versión básica)")
-        
+            raise NotImplementedError(
+                "Float no soportado en ARMBuilder (versión básica)"
+            )
+
         var_info = self.variables.get(base)
         if var_info:
             offset = var_info["offset"]
@@ -111,38 +118,61 @@ class ARMBuilder(Builder):
                 self.emit(f"    str {temp}, [{base}, #{offset}]")
             else:
                 self.emit(f"    str {rd}, [{base}, #{offset}]")
-    
+
     def _is_literal(self, value: str) -> bool:
         try:
             int(value)
             return True
         except (ValueError, TypeError):
             return False
-    
-    def build_memory_load(self, rd: str, base: str, offset: int = 0, type_name: str = "int"):
+
+    def build_memory_load(
+        self, rd: str, base: str, offset: int = 0, type_name: str = "int"
+    ):
         if type_name == "float":
-            raise NotImplementedError("Float no soportado en ARMBuilder (versión básica)")
-        
+            raise NotImplementedError(
+                "Float no soportado en ARMBuilder (versión básica)"
+            )
+
         var_info = self.variables.get(base)
         if var_info:
             offset = var_info["offset"]
             self.emit(f"    ldr {rd}, [{REGISTROS['FP']}, #{offset}]")
         else:
             self.emit(f"    ldr {rd}, [{base}, #{offset}]")
-    
-    def build_branch_cond(self, cond: str, rs: str, label: str):
-        raise NotImplementedError("Branch condicional no implementado en esta versión básica")
-    
+
+    def build_logical_and(self, rd: str, rs1: str, rs2: str):
+        raise NotImplementedError("Logical AND not implemented in ARMBuilder")
+
+    def build_logical_or(self, rd: str, rs1: str, rs2: str):
+        raise NotImplementedError("Logical OR not implemented in ARMBuilder")
+
+    def build_comparison(
+        self, op: str, rd: str, rs1: str, rs2: str, type_name: str = "int"
+    ):
+        raise NotImplementedError("Comparison not implemented in ARMBuilder")
+
+    def build_branch_cond(self, cond_reg: str, true_label: str, false_label: str):
+        raise NotImplementedError("Branch conditional not implemented in ARMBuilder")
+
+    def build_branch(self, label: str):
+        raise NotImplementedError("Branch not implemented in ARMBuilder")
+
+    def emit_label(self, label: str):
+        raise NotImplementedError("Label emission not implemented in ARMBuilder")
+
     def build_function_call(self, label: str):
-        raise NotImplementedError("Llamada a función no implementada en esta versión básica")
-    
+        raise NotImplementedError("Function call not implemented in ARMBuilder")
+
     def build_return(self):
-        raise NotImplementedError("Return no implementado en esta versión básica")
-    
+        raise NotImplementedError("Return not implemented in ARMBuilder")
+
     def build_print(self, value: str, type_name: str):
         if type_name == "float":
-            raise NotImplementedError("Float no soportado en ARMBuilder (versión básica)")
-        
+            raise NotImplementedError(
+                "Float no soportado en ARMBuilder (versión básica)"
+            )
+
         self.emit(f"    // Print int")
         self.emit(f"    mov {REGISTROS['A0']}, {value}")
         self.emit(f"    bl itoa")
@@ -158,7 +188,7 @@ class ARMBuilder(Builder):
         self.emit(f"    mov {REGISTROS['A2']}, #1")
         self.emit(f"    mov {REGISTROS['SYS']}, #64")
         self.emit(f"    svc #0")
-    
+
     def _generate_itoa(self) -> str:
         code = "itoa:"
         code += "\n    // x0 = integer"
