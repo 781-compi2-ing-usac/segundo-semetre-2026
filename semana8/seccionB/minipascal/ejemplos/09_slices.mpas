@@ -1,0 +1,67 @@
+(* Slices: una VISTA sobre un arreglo, sin copiar. Modificar a través del
+   slice cambia el arreglo original — y al revés — porque comparten los
+   mismos datos. Comparen con el paso por valor de los arreglos completos
+   (Sesión 4) y de los structs (más arriba en esta misma sesión). *)
+
+program Slices;
+begin
+  var numeros: array[5] of integer;
+  numeros[0] := 10;
+  numeros[1] := 20;
+  numeros[2] := 30;
+  numeros[3] := 40;
+  numeros[4] := 50;
+
+  { --------------------------------------------------------------------
+    1. Tomar un slice y leerlo. &numeros[1..4] son los índices 1, 2 y 3
+       (el 4 NO se incluye) — [20, 30, 40].
+  -------------------------------------------------------------------- }
+  var parte := &numeros[1..4];
+  writeln(parte[0]);      { 20 }
+  writeln(length(parte)); { 3 }
+
+  { --------------------------------------------------------------------
+    2. Escribir A TRAVÉS del slice cambia el arreglo ORIGINAL — porque
+       nunca hubo una copia, solo una vista.
+  -------------------------------------------------------------------- }
+  parte[0] := 99;
+  writeln(numeros[1]);   { 99 — el original cambió }
+
+  { --------------------------------------------------------------------
+    3. Y al revés: cambiar el arreglo original se refleja en el slice.
+  -------------------------------------------------------------------- }
+  numeros[2] := 777;
+  writeln(parte[1]);   { 777 — parte[1] corresponde a numeros[2] }
+
+  { --------------------------------------------------------------------
+    4. Recorrer con un while, usando length() como límite — funciona
+       igual con un slice que con un arreglo normal.
+  -------------------------------------------------------------------- }
+  var suma: integer := 0;
+  var i: integer := 0;
+  while i < length(parte) do begin
+    suma := suma + parte[i];
+    i := i + 1;
+  end;
+  writeln(suma);   { 99 + 777 + 40 = 916 }
+
+  { --------------------------------------------------------------------
+    5. Un slice pasado a una función NO se copia — a diferencia de un
+       arreglo completo. Lo que la función escribe a través del slice
+       SÍ se ve reflejado afuera.
+  -------------------------------------------------------------------- }
+  function ponerEnCero(vista: array[3] of integer): integer;
+  begin
+    vista[0] := 0;
+    return vista[0];
+  end;
+
+  writeln(ponerEnCero(parte));   { 0 }
+  writeln(numeros[1]);           { 0 — el original SÍ cambió, a diferencia de un arreglo }
+
+  { ---- error semántico a propósito ---- }
+
+  var fuera_de_rango := &numeros[3..10];   { Error: 10 se sale del tamaño 5 }
+
+  writeln('el programa sigue vivo después del error de arriba');
+end.
