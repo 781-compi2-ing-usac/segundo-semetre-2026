@@ -78,7 +78,8 @@ class ARMBuilder(Builder):
 
         self.offset_counter += 8
         offset = -self.offset_counter
-        self.variables[var_name] = {"offset": offset, "type": type_name}
+        actual_type = "int" if type_name == "bool" else type_name
+        self.variables[var_name] = {"offset": offset, "type": actual_type}
         return var_name
 
     def build_arithmetic(
@@ -141,31 +142,30 @@ class ARMBuilder(Builder):
         else:
             self.emit(f"    ldr {rd}, [{base}, #{offset}]")
 
-    def build_logical_and(self, rd: str, rs1: str, rs2: str):
-        raise NotImplementedError("Logical AND not implemented in ARMBuilder")
-
-    def build_logical_or(self, rd: str, rs1: str, rs2: str):
-        raise NotImplementedError("Logical OR not implemented in ARMBuilder")
-
     def build_comparison(
         self, op: str, rd: str, rs1: str, rs2: str, type_name: str = "int"
     ):
-        raise NotImplementedError("Comparison not implemented in ARMBuilder")
+        if type_name == "float":
+            raise NotImplementedError(
+                "Float no soportado en ARMBuilder (versión básica)"
+            )
+
+        op_map = {"<": "lt", ">": "gt", "<=": "le", ">=": "ge", "==": "eq"}
+        arm_cond = op_map.get(op, "eq")
+
+        self.emit(f"    cmp {rs1}, {rs2}")
+        self.emit(f"    cset {rd}, {arm_cond}")
 
     def build_branch_cond(self, cond_reg: str, true_label: str, false_label: str):
-        raise NotImplementedError("Branch conditional not implemented in ARMBuilder")
+        self.emit(f"    cmp {cond_reg}, #0")
+        self.emit(f"    b.ne {true_label}")
+        self.emit(f"    b {false_label}")
 
     def build_branch(self, label: str):
-        raise NotImplementedError("Branch not implemented in ARMBuilder")
+        self.emit(f"    b {label}")
 
     def emit_label(self, label: str):
-        raise NotImplementedError("Label emission not implemented in ARMBuilder")
-
-    def build_function_call(self, label: str):
-        raise NotImplementedError("Function call not implemented in ARMBuilder")
-
-    def build_return(self):
-        raise NotImplementedError("Return not implemented in ARMBuilder")
+        self.emit(f"{label}:")
 
     def build_print(self, value: str, type_name: str):
         if type_name == "float":
@@ -188,6 +188,16 @@ class ARMBuilder(Builder):
         self.emit(f"    mov {REGISTROS['A2']}, #1")
         self.emit(f"    mov {REGISTROS['SYS']}, #64")
         self.emit(f"    svc #0")
+
+    def comment(self, text: str):
+        # En ARM64, los comentarios son opcionales
+        self.emit(f"    // {text}")
+
+    def emitLabels(self, labels: list):
+        # En ARM64, las etiquetas pueden estar consecutivas sin problemas
+        # Simplemente emitimos todas las etiquetas
+        for label in labels:
+            self.emit_label(label)
 
     def _generate_itoa(self) -> str:
         code = "itoa:"

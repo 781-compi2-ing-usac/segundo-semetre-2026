@@ -483,9 +483,13 @@ El `TACBuilder` implementa el patron Builder para generar instrucciones LLVM IR.
 | `emit_main_header()` | Genera el header de `main()` con declaraciones de printf y formatos |
 | `emit_main_footer()` | Genera el footer con `ret i32 0` |
 | `emit_alloca(var_name, type)` | Genera `alloca` para variable y retorna el puntero |
-| `build_arithmetic(op, rd, rs1, rs2, type)` | Genera instruccion aritmetica |
+| `build_arithmetic(op, rd, rs1, rs2, type)` | Genera instruccion aritmetica (`add`, `sub`, `mul`, `sdiv` para int; `fadd`, `fsub`, `fmul`, `fdiv` para float) |
 | `build_memory_store(rd, base, type)` | Genera `store` |
 | `build_memory_load(rd, base, type)` | Genera `load` |
+| `build_comparison(op, rd, rs1, rs2, type)` | Genera comparacion (`icmp` para int, `fcmp` para float) con operadores `slt`, `sgt`, `sle`, `sge`, `eq` |
+| `build_branch_cond(cond_reg, true_label, false_label)` | Genera `br i1 cond_reg, label true_label, label false_label` |
+| `build_branch(label)` | Genera `br label label` (branch incondicional) |
+| `emit_label(label)` | Genera etiqueta `label:` (basic block) |
 | `build_print(value, type)` | Genera llamada a `printf` segun el tipo |
 
 #### `ARMBuilder` (`AST/Builder/arm_builder.py`)
@@ -496,10 +500,14 @@ El `ARMBuilder` implementa el mismo patron Builder pero para generar codigo ensa
 |--------|-------------|
 | `emit_main_header()` | Genera `.global _start`, seccion `.bss` para buffer, y prologo con `stp`/`mov` para frame pointer |
 | `emit_main_footer()` | Genera syscall `exit(0)` y la rutina `itoa` para convertir enteros a string |
-| `emit_alloca(var_name, type)` | Reserva espacio usando offsets desde el Frame Pointer (x29) |
+| `emit_alloca(var_name, type)` | Reserva espacio usando offsets desde el Frame Pointer (x29). Bool se trata como int |
 | `build_arithmetic(op, rd, rs1, rs2, type)` | Genera `add`, `sub`, `mul`, `sdiv` |
 | `build_memory_store(rd, base, offset, type)` | Genera `str` con offset desde FP |
 | `build_memory_load(rd, base, offset, type)` | Genera `ldr` con offset desde FP |
+| `build_comparison(op, rd, rs1, rs2, type)` | Genera `cmp` + `cset` con condicion (`lt`, `gt`, `le`, `ge`, `eq`) |
+| `build_branch_cond(cond_reg, true_label, false_label)` | Genera `cmp cond_reg, #0` + `b.ne true_label` + `b false_label` |
+| `build_branch(label)` | Genera `b label` (branch incondicional) |
+| `emit_label(label)` | Genera etiqueta `label:` |
 | `build_print(value, type)` | Usa rutina `itoa` + syscall `write(64)` para imprimir |
 
 **Registros ARM64 utilizados:**

@@ -1,0 +1,25 @@
+@.fmt_int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
+@.fmt_float = private unnamed_addr constant [4 x i8] c"%f\0A\00"
+@.fmt_bool = private unnamed_addr constant [4 x i8] c"%d\0A\00"
+
+declare i32 @printf(ptr, ...)
+
+define i32 @main() {
+entry:
+    %x_ptr = alloca i32
+    store i32 5, ptr %x_ptr
+    br label %L1
+L1:
+    %t1 = load i32, ptr %x_ptr
+    %t2 = icmp sgt i32 %t1, 0
+    br i1 %t2, label %L2, label %L3
+L2:
+    %t3 = load i32, ptr %x_ptr
+    call i32 (ptr, ...) @printf(ptr @.fmt_int, i32 %t3)
+    %t4 = load i32, ptr %x_ptr
+    %t5 = sub i32 %t4, 1
+    store i32 %t5, ptr %x_ptr
+    br label %L1
+L3:
+    ret i32 0
+}

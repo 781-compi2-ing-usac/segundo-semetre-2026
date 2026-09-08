@@ -44,14 +44,6 @@ class Builder(ABC):
         pass
 
     @abstractmethod
-    def build_logical_and(self, rd: str, rs1: str, rs2: str):
-        pass
-
-    @abstractmethod
-    def build_logical_or(self, rd: str, rs1: str, rs2: str):
-        pass
-
-    @abstractmethod
     def build_comparison(
         self, op: str, rd: str, rs1: str, rs2: str, type_name: str = "int"
     ):
@@ -74,46 +66,9 @@ class Builder(ABC):
         pass
 
     @abstractmethod
-    def emit_main_footer(self):
-        """Genera el footer del programa (exit/return)."""
+    def emitLabels(self, labels: list):
         pass
 
     @abstractmethod
-    def emit_alloca(self, var_name: str, type_name: str) -> str:
-        """Reserva espacio para una variable y retorna su identificador/puntero."""
-        pass
-
-    @abstractmethod
-    def build_arithmetic(self, op: str, rd: str, rs1: str, rs2: str):
-        """Soporte para BinaryOpNode."""
-        pass
-
-    @abstractmethod
-    def build_memory_store(self, rd: str, base: str, offset: int):
-        """Asignaciones a variables/arreglos."""
-        pass
-
-    @abstractmethod
-    def build_memory_load(self, rd: str, base: str, offset: int):
-        """Lectura de variables/arreglos."""
-        pass
-
-    @abstractmethod
-    def build_branch_cond(self, cond: str, rs: str, label: str):
-        """Soporte para IfNode y WhileNode."""
-        pass
-
-    @abstractmethod
-    def build_function_call(self, label: str):
-        """Soporte para FunctionCallNode."""
-        pass
-
-    @abstractmethod
-    def build_return(self):
-        """Soporte para ReturnNode."""
-        pass
-
-    @abstractmethod
-    def build_print(self, value: str, type_name: str):
-        """Imprimir valor según el tipo."""
+    def comment(self, text: str):
         pass

@@ -82,12 +82,6 @@ class TACBuilder(Builder):
         llvm_type = self.get_type_llvm(type_name)
         self.emit(f"    {rd} = load {llvm_type}, ptr {base}")
 
-    def build_logical_and(self, rd: str, rs1: str, rs2: str):
-        self.emit(f"    {rd} = and i1 {rs1}, {rs2}")
-
-    def build_logical_or(self, rd: str, rs1: str, rs2: str):
-        self.emit(f"    {rd} = or i1 {rs1}, {rs2}")
-
     def build_comparison(
         self, op: str, rd: str, rs1: str, rs2: str, type_name: str = "int"
     ):
@@ -125,4 +119,21 @@ class TACBuilder(Builder):
                 f"    call i32 (ptr, ...) @printf(ptr @.fmt_float, double {value})"
             )
         elif type_name == "bool":
-            self.emit(f"    call i32 (ptr, ...) @printf(ptr @.fmt_bool, i32 {value})")
+            # En LLVM IR, necesitamos extender i1 a i32 antes de imprimir
+            temp = self.new_temp()
+            self.emit(f"    {temp} = zext i1 {value} to i32")
+            self.emit(f"    call i32 (ptr, ...) @printf(ptr @.fmt_bool, i32 {temp})")
+
+    def comment(self, text: str):
+        # En LLVM IR, los comentarios son obligatorios para explicar la estructura
+        self.emit(f"    ; {text}")
+
+    def emitLabels(self, labels: list):
+        # En LLVM IR, cada basic block debe terminar con una instrucción terminador
+        # Por lo tanto, entre etiquetas consecutivas necesitamos un branch incondicional
+        for i, label in enumerate(labels):
+            self.emit_label(label)
+            # Si no es la última etiqueta, agregar branch a la siguiente
+            if i < len(labels) - 1:
+                self.build_branch(labels[i + 1])
+        # La última etiqueta queda abierta para el código que sigue

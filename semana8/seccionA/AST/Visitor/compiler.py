@@ -71,8 +71,7 @@ class Compiler(Visitor):
         if node.op == "&":
             left_ev, left_ef = self.dispatch(node.left)
 
-            for ev_label in left_ev:
-                self.builder.emit_label(ev_label)
+            self.builder.emitLabels(left_ev)
 
             right_ev, right_ef = self.dispatch(node.right)
 
@@ -81,8 +80,7 @@ class Compiler(Visitor):
         elif node.op == "|":
             left_ev, left_ef = self.dispatch(node.left)
 
-            for ef_label in left_ef:
-                self.builder.emit_label(ef_label)
+            self.builder.emitLabels(left_ef)
 
             right_ev, right_ef = self.dispatch(node.right)
 
@@ -94,16 +92,14 @@ class Compiler(Visitor):
     def visit_if(self, node: IfNode):
         ev_labels, ef_labels = self.dispatch(node.condition)
 
-        for ev_label in ev_labels:
-            self.builder.emit_label(ev_label)
+        self.builder.emitLabels(ev_labels)
 
         self.dispatch(node.block)
 
         end_label = self.builder.new_label()
         self.builder.build_branch(end_label)
 
-        for ef_label in ef_labels:
-            self.builder.emit_label(ef_label)
+        self.builder.emitLabels(ef_labels)
         self.builder.build_branch(end_label)
 
         self.builder.emit_label(end_label)
@@ -148,7 +144,15 @@ class Compiler(Visitor):
 
     def visit_print(self, node: PrintNode):
         if isinstance(node.expression, (RelOpNode, LogicOpNode)):
-            self._materialize_to_print(node.expression)
+            ev_labels, ef_labels = self.dispatch(node.expression)
+            end_label = self.builder.new_label()
+            self.builder.emitLabels(ev_labels)
+            self.builder.build_print("1", "int")
+            self.builder.build_branch(end_label)
+            self.builder.emitLabels(ef_labels)
+            self.builder.build_print("0", "int")
+            self.builder.build_branch(end_label)
+            self.builder.emit_label(end_label)
         else:
             value = self.dispatch(node.expression)
             expr_type = self._get_expr_type(node.expression)
@@ -157,19 +161,19 @@ class Compiler(Visitor):
 
     def visit_while(self, node: WhileNode):
         loop_start = self.builder.new_label()
+        # En LLVM IR, necesitamos un branch al inicio del loop
+        self.builder.build_branch(loop_start)
         self.builder.emit_label(loop_start)
 
         ev_labels, ef_labels = self.dispatch(node.condition)
 
-        for ev_label in ev_labels:
-            self.builder.emit_label(ev_label)
+        self.builder.emitLabels(ev_labels)
 
         self.dispatch(node.block)
 
         self.builder.build_branch(loop_start)
 
-        for ef_label in ef_labels:
-            self.builder.emit_label(ef_label)
+        self.builder.emitLabels(ef_labels)
 
         return None
 
@@ -203,32 +207,11 @@ class Compiler(Visitor):
 
     def _materialize_to_variable(self, condition_node, base, type_name):
         ev_labels, ef_labels = self.dispatch(condition_node)
-
-        for ev_label in ev_labels:
-            self.builder.emit_label(ev_label)
-        self.builder.build_memory_store(1, base, type_name=type_name)
         end_label = self.builder.new_label()
+        self.builder.emitLabels(ev_labels)
+        self.builder.build_memory_store(1, base, type_name=type_name)
         self.builder.build_branch(end_label)
-
-        for ef_label in ef_labels:
-            self.builder.emit_label(ef_label)
+        self.builder.emitLabels(ef_labels)
         self.builder.build_memory_store(0, base, type_name=type_name)
         self.builder.build_branch(end_label)
-
-        self.builder.emit_label(end_label)
-
-    def _materialize_to_print(self, condition_node):
-        ev_labels, ef_labels = self.dispatch(condition_node)
-
-        for ev_label in ev_labels:
-            self.builder.emit_label(ev_label)
-        self.builder.build_print("1", "int")
-        end_label = self.builder.new_label()
-        self.builder.build_branch(end_label)
-
-        for ef_label in ef_labels:
-            self.builder.emit_label(ef_label)
-        self.builder.build_print("0", "int")
-        self.builder.build_branch(end_label)
-
         self.builder.emit_label(end_label)
