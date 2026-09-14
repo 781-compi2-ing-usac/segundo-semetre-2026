@@ -1,0 +1,6 @@
+let numero = 4*5+6;
+println!(numero);
+let x = 20-6;
+println!(x);
+let f = 2.5 + 3.1;
+println!(f);
