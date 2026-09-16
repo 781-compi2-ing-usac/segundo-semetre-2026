@@ -1,0 +1,41 @@
+(* Variables, constantes, y sus errores. Todo esto es NUEVO de esta semana:
+   la Sesión 1 no tenía ni `var` ni `const` ni asignación.
+
+   Corran esto y comparen la salida con lo que esperan, línea por línea. *)
+
+program Variables;
+begin
+  var edad: integer := 20;
+  var promedio: real := 8.5;
+  const PI: real := 3.1416;
+
+  writeln(edad);
+  writeln(promedio);
+  writeln(PI);
+
+  (* Reasignar una variable mutable: sin problema *)
+  edad := edad + 1;
+  writeln(edad);
+
+  (* Variable sin valor inicial: usa el valor por defecto de su tipo *)
+  var contador: integer;
+  writeln(contador);
+
+  (* Un bloque anidado abre su propio ámbito *)
+  begin
+    var mensaje: string := 'estoy dentro del bloque';
+    writeln(mensaje);
+    edad := 99;   (* SÍ puede modificar la de afuera: `asignar` sube al padre *)
+  end;
+  writeln(edad);   (* 99: el cambio de arriba sí se ve aquí *)
+
+  (* ---- de aquí para abajo, tres errores semánticos a propósito ---- *)
+
+  PI := 3.0;              (* Error: PI es constante *)
+
+  fantasma := 10;          (* Error: 'fantasma' no ha sido declarada *)
+
+  writeln(edad + 'texto');  (* Error: no se puede sumar integer con string *)
+
+  writeln('el programa sigue vivo después de los 3 errores de arriba');
+end.

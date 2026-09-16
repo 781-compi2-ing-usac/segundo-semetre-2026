@@ -1,0 +1,75 @@
+(* Control de flujo: if/else, while (con y sin etiqueta), repeat/until,
+   case, y break/continue. Todo lo nuevo de esta semana en un solo
+   archivo, más 2 errores semánticos al final. *)
+
+program ControlDeFlujo;
+begin
+  var edad: integer := 20;
+
+  if edad >= 18 then begin
+    writeln('mayor de edad');
+  end else begin
+    writeln('menor de edad');
+  end;
+
+  (* if sin else *)
+  if edad > 100 then begin
+    writeln('esto no se imprime');
+  end;
+
+  (* while normal *)
+  var contador: integer := 0;
+  while contador < 5 do begin
+    writeln(contador);
+    contador := contador + 1;
+  end;
+
+  (* while CON etiqueta, break que atraviesa un ciclo anidado *)
+  var total: integer := 0;
+  externo: while true do begin
+    var i: integer := 0;
+    while true do begin
+      i := i + 1;
+      total := total + i;
+      if i == 3 then begin
+        break externo;   (* sale de LOS DOS ciclos, no solo del interno *)
+      end;
+    end;
+  end;
+  writeln(total);   (* 1 + 2 + 3 = 6 *)
+
+  (* repeat/until: corre al menos una vez, con continue *)
+  var n: integer := 0;
+  var suma: integer := 0;
+  repeat
+    n := n + 1;
+    if n == 2 then begin
+      continue;   (* salta el resto de esta vuelta, va directo a 'until' *)
+    end;
+    suma := suma + n;
+  until n >= 4;
+  writeln(suma);   (* 1 + 3 + 4 = 8, el 2 se saltó por el continue *)
+
+  (* case *)
+  var dia: integer := 3;
+  case dia of
+    1: begin writeln('lunes'); end;
+    2: begin writeln('martes'); end;
+    3: begin writeln('miercoles'); end;
+  else
+    begin writeln('otro dia'); end;
+  end;
+  (* el 'else' de arriba también termina en ';', igual que cada rama *)
+
+  (* ---- errores semánticos a propósito ---- *)
+
+  if 5 + 3 then begin           (* Error: la condición no es boolean *)
+    writeln('esto no se imprime');
+  end;
+
+  while 'hola' do begin         (* Error: la condición no es boolean *)
+    writeln('esto tampoco');
+  end;
+
+  writeln('el programa sigue vivo después de los 2 errores de arriba');
+end.
