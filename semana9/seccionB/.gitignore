@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+parser.out
+parsetab.py
+ast.dot
+*.png
+*.svg
+reporte.html
+
+# Proyecto 2 — artefactos de compilación a ARM64
+salida.s
+salida
+*.o
+arm/01_hola
+arm/02_aritmetica

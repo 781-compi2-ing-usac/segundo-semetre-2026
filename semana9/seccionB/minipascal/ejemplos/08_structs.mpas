@@ -1,0 +1,58 @@
+(* Records (structs): declarar el tipo, declarar una variable, leer y
+   escribir campos, dos instancias independientes, paso por valor a una
+   función, y dos errores semánticos a propósito. *)
+
+program Structs;
+begin
+  { --------------------------------------------------------------------
+    1. Declarar el TIPO (una sola vez), después declarar VARIABLES de
+       ese tipo (tantas como quieran). Cada variable arranca con todos
+       sus campos en el valor por defecto de su tipo.
+  -------------------------------------------------------------------- }
+  type Persona = record
+    nombre: string;
+    edad: integer;
+  end;
+
+  var p: Persona;
+  writeln(p.nombre);   { '' — string vacío, el valor por defecto }
+  writeln(p.edad);     { 0 }
+
+  { --------------------------------------------------------------------
+    2. Escribir y leer campos.
+  -------------------------------------------------------------------- }
+  p.nombre := 'Ana';
+  p.edad := 20;
+  writeln(p.nombre);   { Ana }
+  writeln(p.edad);     { 20 }
+
+  { --------------------------------------------------------------------
+    3. Dos instancias del mismo tipo son independientes.
+  -------------------------------------------------------------------- }
+  var otra: Persona;
+  otra.nombre := 'Luis';
+  writeln(p.nombre);      { Ana, sin cambiar }
+  writeln(otra.nombre);   { Luis }
+
+  { --------------------------------------------------------------------
+    4. Paso por valor: una función recibe una COPIA del registro. Lo que
+       le hace a su copia no se ve reflejado afuera — misma regla que ya
+       vieron con arreglos en la Sesión 4.
+  -------------------------------------------------------------------- }
+  function cumplirAnios(persona: Persona): integer;
+  begin
+    persona.edad := persona.edad + 1;
+    return persona.edad;
+  end;
+
+  writeln(cumplirAnios(p));   { 21 (la copia adentro de la función) }
+  writeln(p.edad);            { 20 (la de afuera no cambió) }
+
+  { ---- de aquí para abajo, dos errores semánticos a propósito ---- }
+
+  writeln(p.apellido);        { Error: 'Persona' no tiene ese campo }
+
+  var otro: Desconocido;      { Error: el tipo 'Desconocido' no existe }
+
+  writeln('el programa sigue vivo después de los 2 errores de arriba');
+end.

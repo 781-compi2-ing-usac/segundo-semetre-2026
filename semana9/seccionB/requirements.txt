@@ -1,0 +1,6 @@
+# Sesión 1 del Proyecto 2. Solo lo que se usa esta semana.
+#
+# Django vuelve en la sesión de cierre (semana14), cuando toque la GUI.
+# No está aquí para que `pip install` sea rápido: hoy no se usa.
+ply==3.11
+graphviz==0.21
