@@ -1,0 +1,41 @@
+let numero = 4*5+6;
+println!(numero);
+let x = 20-6;
+println!(x);
+let f = 2.5 + 3.1;
+println!(f);
+let a = 1;
+if a {
+    println!(a);
+}
+let z = 0;
+if z {
+    println!(z);
+}
+let j = 23;
+while j {
+    println!(j);
+    let j = j - 1;
+}
+let b = 17;
+while b {
+    println!(b);
+    break;
+}
+let c = 16;
+while c {
+    let c = c - 1;
+    if c {
+        continue;
+    }
+    println!(c);
+}
+let e = 4;
+if e == 4 {
+    println!(e);
+}
+let n = 3;
+while n != 0 {
+    println!(n);
+    let n = n - 1;
+}
