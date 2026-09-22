@@ -339,9 +339,277 @@ sequenceDiagram
 
 ---
 
-## 7. Principios de Diseño de Gramáticas
+## 7. Caso de Estudio 2: Literales de Arrays Recursivos
 
-### 7.1 Principio 1: Piensa en el AST, no solo en la Sintaxis
+### 7.1 El Problema de los Literales
+
+Consideremos la declaración de un array: `int arr = [1, 2, 3, 4, 5]`
+
+Necesitamos:
+1. Validar que todos los elementos sean del mismo tipo
+2. Calcular las dimensiones del array
+3. Determinar la longitud total
+4. Detectar errores de tipo lo antes posible (fail-fast)
+
+### 7.2 Enfoque 1: Lista Plana
+
+**Gramática actual:**
+```bnf
+array : array COMMA E
+      | E
+```
+
+**AST generado para `[1, 2, 3]`:**
+```mermaid
+graph TD
+    A[ArrayNode] --> B[array]
+    B --> C[PrimitiveNode 1]
+    B --> D[PrimitiveNode 2]
+    B --> E[PrimitiveNode 3]
+```
+
+**Problema:** La lista plana requiere procesar todos los elementos antes de poder validar tipos o calcular dimensiones.
+
+### 7.3 Enfoque 2: Estructura Recursiva
+
+**Gramática recursiva:**
+```bnf
+array_exp : array_exp COMMA E
+          | LBRACE E RBRACE
+```
+
+**AST generado para `[1, 2, 3]`:**
+```mermaid
+graph TD
+    A[ArrayNode] --> B[base]
+    A --> C[element: 3]
+    B --> D[ArrayNode]
+    D --> E[base]
+    D --> F[element: 2]
+    E --> G[ArrayNode]
+    G --> H[base: 1]
+```
+
+**Ventaja:** El AST es recursivo, permitiendo procesamiento incremental.
+
+### 7.4 Cálculo Recursivo de Dimensiones
+
+Con la gramática recursiva, podemos calcular dimensiones de forma natural:
+
+```python
+def visit_array(self, node: ArrayNode):
+    # Caso base: primer elemento
+    if not isinstance(node.base, ArrayNode):
+        element_type = self.dispatch(node.base)
+        return {
+            "type": element_type,
+            "dimensions": 1,
+            "length": 1,
+            "shape": (1,)
+        }
+    
+    # Caso recursivo: procesar base primero
+    base_info = self.visit_array(node.base)
+    
+    # Validar tipo del elemento actual
+    element_type = self.dispatch(node.element)
+    if element_type != base_info["type"]:
+        raise CompilerError(f"Type mismatch in array: expected {base_info['type']}, got {element_type}")
+    
+    # Incrementar longitud
+    return {
+        "type": base_info["type"],
+        "dimensions": base_info["dimensions"],
+        "length": base_info["length"] + 1,
+        "shape": (base_info["length"] + 1,)
+    }
+```
+
+### 7.5 Fail-Fast en Validación de Tipos
+
+**Ejemplo:** `[1, 2, "error", 4]`
+
+**Enfoque iterativo (lista plana):**
+```python
+def visit_array(self, node: ArrayNode):
+    element_types = []
+    for elem in node.array:
+        # Procesa TODOS los elementos
+        element_types.append(self.dispatch(elem))
+    
+    # Valida tipos después de procesar todo
+    if not all(t == element_types[0] for t in element_types):
+        raise CompilerError("Type mismatch")
+```
+
+**Problema:** Procesa el `4` incluso aunque ya detectó el error en `"error"`.
+
+**Enfoque recursivo:**
+```python
+def visit_array(self, node: ArrayNode):
+    # Caso base
+    if not isinstance(node.base, ArrayNode):
+        return self.dispatch(node.base)
+    
+    # Procesar base primero
+    base_type = self.visit_array(node.base)
+    
+    # Si la base ya tiene error, no procesamos element
+    if base_type == ERROR:
+        return ERROR
+    
+    # Validar solo este elemento
+    element_type = self.dispatch(node.element)
+    if element_type != base_type:
+        return ERROR  # Fail-fast: no procesamos más
+    
+    return base_type
+```
+
+**Ventaja:** Si detectamos error en posición 3, no procesamos el elemento 4.
+
+### 7.6 Construcción Incremental del Offset
+
+**Enfoque iterativo:**
+```python
+def visit_array(self, node: ArrayNode):
+    first_offset = None
+    for elem in node.array:
+        offset = self.builder.emit_alloca(...)
+        self.builder.build_memory_store(elem.value, offset)
+        if first_offset is None:
+            first_offset = offset
+    return first_offset
+```
+
+**Enfoque recursivo:**
+```python
+def visit_array(self, node: ArrayNode):
+    # Caso base: primer elemento
+    if not isinstance(node.base, ArrayNode):
+        offset = self.builder.emit_alloca("arr_0", element_type)
+        self.builder.build_memory_store(node.base.value, offset)
+        return offset  # Offset del primer elemento
+    
+    # Procesar base recursivamente
+    base_offset = self.visit_array(node.base)
+    
+    # Agregar este elemento al final
+    current_offset = self.builder.emit_alloca(f"arr_{current_index}", element_type)
+    self.builder.build_memory_store(node.element.value, current_offset)
+    
+    # Retornar el offset del primer elemento (no cambia)
+    return base_offset
+```
+
+**Ventaja:** El offset base se construye una sola vez y se propaga hacia arriba.
+
+### 7.7 Simetría entre Literales y Acceso
+
+Con gramáticas recursivas para ambos, obtenemos una simetría elegante:
+
+**Literal recursivo:**
+```bnf
+array_exp : array_exp COMMA E
+          | LBRACE E RBRACE
+```
+
+**Acceso recursivo:**
+```bnf
+array_access : array_access LBRACE E RBRACE
+             | ID LBRACE E RBRACE
+             | ID
+```
+
+**ASTs simétricos:**
+
+Literal `[1, 2, 3]`:
+```mermaid
+graph TD
+    A[ArrayNode] --> B[base: ArrayNode]
+    A --> C[element: 3]
+    B --> D[base: ArrayNode]
+    B --> E[element: 2]
+    D --> F[base: 1]
+```
+
+Acceso `arr[0][1][2]`:
+```mermaid
+graph TD
+    A[ArrayAccessNode] --> B[base: ArrayAccessNode]
+    A --> C[index: 2]
+    B --> D[base: ArrayAccessNode]
+    B --> E[index: 1]
+    D --> F[base: VariableNode arr]
+    D --> G[index: 0]
+```
+
+**Observación:** Ambos usan el mismo patrón recursivo, haciendo el diseño más coherente.
+
+### 7.8 Cálculo de Dimensiones para Arrays Multidimensionales
+
+Para `[[1, 2, 3], [4, 5, 6]]`:
+
+**Enfoque recursivo:**
+```python
+def visit_array(self, node: ArrayNode):
+    # Caso base: array 1D
+    if not isinstance(node.base, ArrayNode):
+        element_type = self.dispatch(node.base)
+        return {
+            "type": element_type,
+            "dimensions": 1,
+            "shape": (1,)
+        }
+    
+    # Caso recursivo
+    base_info = self.visit_array(node.base)
+    
+    # Si es array de arrays, calcular dimensiones superiores
+    if isinstance(node.element, ArrayNode):
+        element_info = self.visit_array(node.element)
+        
+        # Validar que todas las sub-arrays tengan la misma forma
+        if base_info["shape"] != element_info["shape"]:
+            raise CompilerError("Inconsistent array dimensions")
+        
+        return {
+            "type": element_info["type"],
+            "dimensions": base_info["dimensions"] + 1,
+            "shape": (2, *element_info["shape"])  # 2 filas, shape de columna
+        }
+```
+
+**Ventaja:** Las dimensiones se calculan naturalmente durante el recorrido recursivo.
+
+### 7.9 Comparación de Complejidad
+
+| Aspecto | Lista Plana | Recursivo |
+|---------|-------------|-----------|
+| **Validación de tipos** | Procesa todos, luego valida | Fail-fast en cada paso |
+| **Cálculo de dimensiones** | Iteración posterior | Cálculo incremental |
+| **Construcción de offset** | Bucle + condición | Recursión natural |
+| **Detección de errores** | Después de procesar todo | Inmediata |
+| **Consistencia del diseño** | Diferente del acceso | Simétrico con acceso |
+
+### 7.10 Consideraciones Prácticas
+
+**Ventajas:**
+- Fail-fast en validación de tipos
+- Construcción incremental de offsets
+- Simetría con el acceso a arrays
+- Cálculo natural de dimensiones
+
+**Desventajas:**
+- AST más profundo (O(n) vs O(1))
+- Posible límite de recursión en Python para arrays muy grandes
+- Menos eficiente en memoria para arrays grandes
+
+---
+
+## 8. Principios de Diseño de Gramáticas
+
+### 8.1 Principio 1: Piensa en el AST, no solo en la Sintaxis
 
 **Mal diseño:**
 ```bnf
@@ -365,7 +633,7 @@ term   : term TIMES factor | factor
 factor : NUM | ID | LPAREN expr RPAREN
 ```
 
-### 7.2 Principio 2: Usa Recursividad para Estructuras Anidadas
+### 8.2 Principio 2: Usa Recursividad para Estructuras Anidadas
 
 Cuando la semántica es recursiva, la gramática y el AST deben serlo también.
 
@@ -392,7 +660,7 @@ MethodCallNode
   method: method3
 ```
 
-### 7.3 Principio 3: Cada Nivel de Recursión = Un Nivel Semántico
+### 8.3 Principio 3: Cada Nivel de Recursión = Un Nivel Semántico
 
 **Mal diseño:**
 ```bnf
@@ -412,7 +680,7 @@ access : access LBRACE expr RBRACE
 
 Cada nivel de `access` corresponde a un nivel de indirection.
 
-### 7.4 Principio 4: Evita Listas Planas cuando la Semántica es Recursiva
+### 8.4 Principio 4: Evita Listas Planas cuando la Semántica es Recursiva
 
 **Pregunta clave:** ¿El procesamiento de esta construcción requiere iteración o recursión?
 
@@ -438,9 +706,9 @@ Aquí la recursión es necesaria, porque cada nivel de acceso depende del result
 
 ---
 
-## 8. Ejemplo Completo: Refactorización
+## 9. Ejemplo Completo: Refactorización
 
-### 8.1 Antes: Gramática con Lista Plana
+### 9.1 Antes: Gramática con Lista Plana
 
 **Gramática:**
 ```bnf
@@ -478,7 +746,7 @@ def _calculate_array_offset(self, indices, shape):
     # ... calcular partial * shape[-1] + indices[-1]
 ```
 
-### 8.2 Después: Gramática Recursiva
+### 9.2 Después: Gramática Recursiva
 
 **Gramática:**
 ```bnf
@@ -509,7 +777,7 @@ def visit_array_access(self, node: ArrayAccessNode):
 
 **Sin función auxiliar:** La recursión está en el visitor, no en una función separada.
 
-### 8.3 Comparación de Complejidad
+### 9.3 Comparación de Complejidad
 
 | Aspecto | Antes (Lista Plana) | Después (Recursivo) |
 |---------|---------------------|---------------------|
@@ -521,16 +789,16 @@ def visit_array_access(self, node: ArrayAccessNode):
 
 ---
 
-## 9. Conclusión
+## 10. Conclusión
 
-### 9.1 Una Gramática Bien Diseñada
+### 10.1 Una Gramática Bien Diseñada
 
 1. **Reduce código en los visitors**: Elimina funciones auxiliares y bucles
 2. **Hace el código más mantenible**: Patrones recursivos son más fáciles de razonar
 3. **Refleja la semántica del lenguaje**: La estructura del AST mapea directamente al significado
 4. **Facilita la extensión**: Agregar nuevas construcciones es más natural
 
-### 9.2 Preguntas Clave al Diseñar una Gramática
+### 10.2 Preguntas Clave al Diseñar una Gramática
 
 1. **¿Cuál es la semántica de esta construcción?**
    - ¿Es recursiva o iterativa?
@@ -544,7 +812,7 @@ def visit_array_access(self, node: ArrayAccessNode):
    - ¿Usarán recursión o iteración?
    - ¿Necesitarán funciones auxiliares?
 
-### 9.3 Regla de Oro
+### 10.3 Regla de Oro
 
 > **Si la semántica es recursiva, la gramática y el AST deben ser recursivos también.**
 
@@ -552,6 +820,6 @@ Una gramática que produce un AST que no refleja la semántica del lenguaje es u
 
 ---
 
-## 10. Referencias
+## 11. Referencias
 
 - Aho, A. V., Lam, M. S., Sethi, R., & Ullman, J. D. (2006). *Compilers: Principles, Techniques, and Tools* (2nd ed.). Addison-Wesley.
