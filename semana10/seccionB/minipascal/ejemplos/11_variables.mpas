@@ -1,0 +1,44 @@
+{ Variables en el stack — el ejemplo de hoy que recorre TODO el camino.
+
+  Córranlo de las dos formas y comparen:
+
+      python main.py            ejemplos/11_variables.mpas    <- intérprete
+      python main.py --compilar ejemplos/11_variables.mpas    <- ARM64 + QEMU
+
+  Tienen que imprimir exactamente lo mismo. Abran salida.s después de
+  correr con --compilar y busquen, para cada línea de aquí abajo, el
+  'sub sp' que reservó su celda y el 'str'/'ldr' que la usa.
+
+  Solo hay 'integer' a propósito: 'real', 'boolean' y 'string' siguen sin
+  generador — lo van a ver reventar en el ejercicio 2 del README. }
+
+program Variables64;
+begin
+  { Declarar: reserva una celda nueva Y la llena }
+  var a: integer := 10;
+  writeln(a);                { 10 }
+
+  { Una variable sin valor inicial usa 0 por defecto }
+  var b: integer;
+  writeln(b);                { 0 }
+
+  { Reasignar: MISMA celda de 'b', ninguna reserva nueva }
+  b := 20;
+  writeln(b);                { 20 }
+
+  { Una expresión que lee DOS variables — el entorno de compilación
+    resuelve 'a' y 'b' a offsets distintos, y el modelo de pila de la
+    Sesión 1 hace el resto sin cambios }
+  var suma: integer := a + b;
+  writeln(suma);             { 30 }
+
+  { Una variable puede aparecer en su propia reasignación }
+  a := a + 1;
+  writeln(a);                { 11 }
+
+  { const se reserva y se llena exactamente igual que var — el generador
+    de hoy no distingue una de otra a propósito, ver la nota en
+    generador_arm.py }
+  const LIMITE: integer := 100;
+  writeln(LIMITE);           { 100 }
+end.
