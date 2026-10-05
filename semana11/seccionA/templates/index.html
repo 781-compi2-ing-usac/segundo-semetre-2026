@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Compilador</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+
+<div id="app">
+
+    <div id="toolbar">
+        <button onclick="compileCode()">
+            Ejecutar
+        </button>
+        
+        <div class="toolbar-group">
+            <label>Modo:</label>
+            <select id="mode-select">
+                <option value="interpreter">Intérprete</option>
+                <option value="compiler">Compilador</option>
+            </select>
+        </div>
+        
+        <div class="toolbar-group">
+            <label>Builder:</label>
+            <select id="builder-select">
+                <option value="tac">TAC (LLVM)</option>
+                <option value="arm">ARM64</option>
+            </select>
+        </div>
+        
+        <button onclick="copyOutput()" id="copy-btn" disabled>
+            Copiar
+        </button>
+    </div>
+
+    <div id="main-content">
+        <div id="editor-panel">
+            <div id="editor"></div>
+        </div>
+        
+        <div id="output-panel">
+            <div id="console">
+                <pre id="output"></pre>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/loader.min.js"></script>
+<script src="/static/js/editor.js"></script>
+
+</body>
+</html>

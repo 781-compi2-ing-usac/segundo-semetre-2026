@@ -1,0 +1,130 @@
+html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+
+#app {
+    display: grid;
+    grid-template-rows: 50px 1fr;
+    height: 100vh;
+}
+
+
+/* Barra superior */
+
+#toolbar {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    gap: 12px;
+    background: #252526;
+    border-bottom: 1px solid #3c3c3c;
+}
+
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+
+.toolbar-group label {
+    color: #cccccc;
+    font-size: 13px;
+}
+
+
+.toolbar-group select {
+    padding: 6px 10px;
+    background: #3c3c3c;
+    color: #cccccc;
+    border: 1px solid #555;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+
+button {
+    padding: 8px 16px;
+    cursor: pointer;
+    background: #0e639c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+
+button:hover {
+    background: #1177bb;
+}
+
+
+button:disabled {
+    background: #3c3c3c;
+    color: #666;
+    cursor: not-allowed;
+}
+
+
+#copy-btn {
+    margin-left: auto;
+}
+
+
+/* Contenido principal */
+
+#main-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 0;
+}
+
+
+/* Editor */
+
+#editor-panel {
+    min-height: 0;
+    border-right: 1px solid #3c3c3c;
+}
+
+
+#editor {
+    height: 100%;
+}
+
+
+/* Panel de salida */
+
+#output-panel {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+
+/* Consola */
+
+#console {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 10px;
+    font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+
+pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
