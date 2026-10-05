@@ -454,7 +454,7 @@ sudo apt install -y qemu-user binutils-aarch64-linux-gnu
 
 #### `Compiler` (`AST/Visitor/compiler.py`)
 
-El `Compiler` es un visitor que recorre el AST y utiliza un `TACBuilder` para generar LLVM IR.
+El `Compiler` es un visitor que recorre el AST y utiliza un `TACBuilder` o `ARMBuilder` para generar código LLVM IR o ensamblador ARM64.
 
 | Metodo | Nodo | Accion |
 |--------|------|--------|
@@ -469,6 +469,10 @@ El `Compiler` es un visitor que recorre el AST y utiliza un `TACBuilder` para ge
 | `visit_assignment` | `AssignmentNode` | Genera `store` para actualizar la variable. Si la expresion es RelOp/LogicOp, materializa a variable |
 | `visit_print` | `PrintNode` | Genera llamada a `printf` con el formato apropiado segun el tipo. Si la expresion es RelOp/LogicOp, materializa a print |
 | `visit_block` | `BlockNode` | Visita cada statement en secuencia |
+| `visit_function_declaration` | `FunctionDeclarationNode` | Guarda la funcion para compilar despues del main |
+| `visit_function_call` | `FunctionCallNode` | Evalua argumentos en x0-x7, caller save, `bl`, caller restore |
+| `visit_param` | `ParamNode` | Genera `emit_alloca` + copia registro al stack |
+| `visit_return` | `ReturnNode` | Mueve resultado a x0 + branch al epílogo |
 
 #### `TACBuilder` (`AST/Builder/tac_builder.py`)
 
@@ -499,7 +503,13 @@ El `ARMBuilder` implementa el mismo patron Builder pero para generar codigo ensa
 | Metodo | Descripcion |
 |--------|-------------|
 | `emit_main_header()` | Genera `.global _start`, seccion `.bss` para buffer, y prologo con `stp`/`mov` para frame pointer |
-| `emit_main_footer()` | Genera syscall `exit(0)` y la rutina `itoa` para convertir enteros a string |
+| `emit_main_footer()` | Genera syscall `exit(0)` |
+| `emit_natives()` | Genera rutina `itoa` para convertir enteros a string y seccion `.rodata` con `newline` |
+| `emit_function_prologue(label, frame_size)` | Genera prólogo de función con prefijo `foreign_func_*`, guarda FP/LR y reserva espacio |
+| `emit_function_epilogue(frame_size)` | Genera epílogo con restauración de FP/LR y `ret` |
+| `build_function_call(label)` | Genera `bl foreign_func_*` |
+| `save_state()` | Guarda estado del builder (temp_count, variables, offset_counter) |
+| `restore_state(state)` | Restaura estado del builder |
 | `emit_alloca(var_name, type)` | Reserva espacio usando offsets desde el Frame Pointer (x29). Bool se trata como int |
 | `build_arithmetic(op, rd, rs1, rs2, type)` | Genera `add`, `sub`, `mul`, `sdiv` |
 | `build_memory_store(rd, base, offset, type)` | Genera `str` con offset desde FP |
@@ -509,6 +519,11 @@ El `ARMBuilder` implementa el mismo patron Builder pero para generar codigo ensa
 | `build_branch(label)` | Genera `b label` (branch incondicional) |
 | `emit_label(label)` | Genera etiqueta `label:` |
 | `build_print(value, type)` | Usa rutina `itoa` + syscall `write(64)` para imprimir |
+| `build_array_load(rd, base_var, offset_reg, type)` | Carga elemento de array con offset calculado |
+| `build_array_store(rd, base_var, offset_reg, type)` | Almacena elemento en array con offset calculado |
+| `build_load_immediate(rd, value)` | Carga valor inmediato en registro |
+| `build_multiply(rd, rs1, rs2)` | Multiplicación de registros |
+| `build_add(rd, rs1, rs2)` | Suma de registros |
 
 **Registros ARM64 utilizados:**
 
@@ -516,11 +531,17 @@ El `ARMBuilder` implementa el mismo patron Builder pero para generar codigo ensa
 |----------|--------|-----|
 | x0-x7 | A0-A7 | Argumentos / temporales |
 | x8 | SYS | Numero de syscall |
-| x9-x15 | T0-T6 | Temporales |
-| x19-x28 | S1-S10 | Saved registers |
+| x9-x15 | T0-T6 | Temporales (caller-saved) |
+| x19-x28 | S1-S10 | Saved registers (callee-saved) |
 | x29 | FP | Frame Pointer |
 | x30 | RA | Return Address |
 | sp | SP | Stack Pointer |
+
+**Convención de llamadas:**
+- **Caller-saved (x9-x15)**: El caller salva estos registros antes de cada llamada
+- **Callee-saved (x19-x28)**: El callee debe preservarlos si los usa
+- **Argumentos (x0-x7)**: Hasta 8 argumentos en registros
+- **Retorno (x0)**: Valor de retorno en x0
 
 **Syscalls utilizados:**
 
@@ -635,6 +656,44 @@ El compilador maneja las variables mediante punteros en memoria:
    @.fmt_int = private unnamed_addr constant [4 x i8] c"%d\0A\00"
    @.fmt_float = private unnamed_addr constant [4 x i8] c"%f\0A\00"
    @.fmt_bool = private unnamed_addr constant [4 x i8] c"%d\0A\00"
+   ```
+
+4. **Funciones** (`fn sum(int :a, int :b) : int`):
+   ```asm
+   ; Llamada desde main
+   mov x0, #10                  ; Primer argumento
+   mov x1, #20                  ; Segundo argumento
+   sub sp, sp, #64              ; Caller save
+   str x9, [sp, #0]
+   ...
+   bl foreign_func_sum          ; Llamada a función
+   ldr x9, [sp, #0]             ; Caller restore
+   ...
+   add sp, sp, #64
+   
+   ; Definición de función
+   foreign_func_sum:
+       stp x29, x30, [sp, #-16]!  ; Guardar FP y LR
+       mov x29, sp                  ; Nuevo FP
+       sub sp, sp, #32              ; Reservar espacio para locales
+       str x0, [x29, #-8]           ; Copiar parámetros
+       str x1, [x29, #-16]
+       ; ... cuerpo de la función ...
+       mov x0, resultado            ; Valor de retorno en x0
+       add sp, sp, #32              ; Liberar espacio
+       ldp x29, x30, [sp], #16      ; Restaurar FP y LR
+       ret                          ; Retornar
+   ```
+
+5. **Registro de activación (stack frame)**:
+   ```
+   [FP+8]  → Return Address (x30)
+   [FP+0]  → Previous FP (x29)      ← FP actual
+   [FP-8]  → Parámetro 1
+   [FP-16] → Parámetro 2
+   [FP-24] → Variable Local 1
+   ...
+   [SP]    → (alineado a 16 bytes)  ← SP actual
    ```
 
 ### 6.5 Ejemplo: Operaciones aritméticas
@@ -832,3 +891,381 @@ print(matrix[1][1])
 2. **Solo tipos primitivos**: Los elementos del array deben ser `int`, `float` (no soportado en ARM) o `bool`.
 3. **Tamaño fijo**: Las dimensiones se determinan en tiempo de compilación a partir del literal.
 4. **Sin aritmética de índices**: Los índices deben ser literales numéricos (aunque el diseño soporta expresiones).
+
+---
+
+## 8. Funciones y Procedimientos
+
+El compilador soporta funciones definidas por el usuario con parámetros, variables locales, recursión y valor de retorno. La implementación utiliza un **registro de activación** (stack frame) siguiendo la convención de llamadas ARM64.
+
+### 8.1 Sintaxis
+
+#### Declaración de función
+```
+fn nombre(tipo1 :param1, tipo2 :param2) : tipo_retorno {
+    // cuerpo de la función
+    return expresion
+}
+```
+
+#### Llamada a función
+```
+nombre(arg1, arg2)
+int x = nombre(arg1, arg2)  // como expresión
+```
+
+#### Ejemplo completo
+```
+fn factorial(int :n) : int {
+    if (n <= 1) {
+        return 1
+    }
+    int prev = factorial(n - 1)
+    int result = n * prev
+    return result
+}
+
+print(factorial(5))
+```
+
+### 8.2 Registro de Activación (Stack Frame)
+
+Cada llamada a función crea un nuevo registro de activación en el stack:
+
+```
+Direcciones altas
+┌──────────────────────────────────┐
+│ Return Address (x30)             │ FP + 8   ← guardado por stp
+│ Previous FP (x29)                │ FP + 0   ← guardado por stp, nuevo FP
+├──────────────────────────────────┤
+│ Parámetro 1 (copia desde x0)     │ FP - 8
+│ Parámetro 2 (copia desde x1)     │ FP - 16
+│ ...                              │
+├──────────────────────────────────┤
+│ Variable Local 1                 │
+│ Variable Local 2                 │
+│ ...                              │
+├──────────────────────────────────┤
+│ Return Value Slot                │
+└──────────────────────────────────┘ ← SP (alineado a 16 bytes)
+Direcciones bajas
+```
+
+**Tamaño del frame**: `16 (FP+LR) + num_params*8 + num_locals*8 + 8 (return slot)`, redondeado a múltiplo de 16 para alineación ARM64.
+
+### 8.3 Convención de Llamadas ARM64
+
+#### Caller-saved (x9-x15)
+El caller salva los registros temporales en uso **antes** de cada llamada:
+
+```asm
+// Antes de llamar a función
+sub sp, sp, #64
+str x9, [sp, #0]
+str x10, [sp, #8]
+str x11, [sp, #16]
+str x12, [sp, #24]
+str x13, [sp, #32]
+str x14, [sp, #40]
+str x15, [sp, #48]
+bl foreign_func_nombre
+// Después de la llamada
+ldr x9, [sp, #0]
+ldr x10, [sp, #8]
+ldr x11, [sp, #16]
+ldr x12, [sp, #24]
+ldr x13, [sp, #32]
+ldr x14, [sp, #40]
+ldr x15, [sp, #48]
+add sp, sp, #64
+```
+
+#### Paso de Parámetros (x0-x7)
+Los argumentos se pasan en registros x0-x7:
+
+```asm
+// fn sum(int :a, int :b)
+ldr x11, [x29, #-8]    // Cargar valor de x
+mov x0, x11            // Primer argumento en x0
+ldr x12, [x29, #-16]   // Cargar valor de y
+mov x1, x12            // Segundo argumento en x1
+bl foreign_func_sum
+```
+
+#### Valor de Retorno (x0)
+El resultado se retorna en el registro x0:
+
+```asm
+// return result
+ldr x12, [x29, #-24]   // Cargar variable local
+mov x0, x12            // Mover a x0
+b sum_exit             // Saltar al epílogo
+```
+
+### 8.4 Prólogo y Epílogo de Función
+
+#### Prólogo (prolog)
+```asm
+foreign_func_factorial:
+    stp x29, x30, [sp, #-16]!  // Guardar FP y LR, crear nuevo frame
+    mov x29, sp                 // Actualizar FP
+    sub sp, sp, #32             // Reservar espacio para locales
+```
+
+#### Epílogo (epilog)
+```asm
+factorial_exit:
+    add sp, sp, #32             // Liberar espacio de locales
+    ldp x29, x30, [sp], #16    // Restaurar FP y LR
+    ret                         // Retornar al caller
+```
+
+### 8.5 Métodos Nuevos en Builder
+
+Se agregaron 6 métodos abstractos a la clase `Builder` y sus implementaciones en `ARMBuilder` y `TACBuilder`:
+
+| Método | Descripción |
+|--------|-------------|
+| `emit_natives()` | Emite rutinas nativas del sistema (itoa, rodata) |
+| `emit_function_prologue(label, frame_size)` | Genera el prólogo de función con prefijo `foreign_func_*` |
+| `emit_function_epilogue(frame_size)` | Genera el epílogo con `ret` |
+| `build_function_call(label)` | Genera `bl foreign_func_*` |
+| `save_state()` | Guarda el estado del builder (temp_count, variables, offset_counter) |
+| `restore_state(state)` | Restaura el estado del builder |
+
+### 8.6 Implementación en Compiler
+
+#### Nuevos Atributos
+```python
+self.functions = []              # Lista de FunctionDeclarationNode pendientes
+self.current_function = None     # Nombre de función en compilación
+self.current_epilogue_label = None  # Label del epílogo actual
+self.current_return_type = None  # Tipo de retorno de la función actual
+self._current_param_index = 0    # Índice del parámetro actual
+```
+
+#### Visit Methods Implementados
+
+| Método | Acción |
+|--------|--------|
+| `visit_function_declaration` | Guarda la función para compilar después del main |
+| `visit_function_call` | Evalúa args en x0-x7, caller save, `bl`, caller restore |
+| `visit_param` | `emit_alloca` + copia registro al stack |
+| `visit_return` | Mueve resultado a x0 + branch al epílogo |
+
+#### Flujo de Compilación
+
+1. **Durante el recorrido del AST**: las declaraciones de función se guardan en `self.functions`
+2. **Después de compilar el main**: se compila cada función usando `_compile_function`
+3. **`_compile_function`**:
+   - Guarda estado del builder (`save_state`)
+   - Resetea builder (temp_count, variables, offset_counter)
+   - Crea nuevo scope en la tabla de símbolos
+   - Emite prólogo (con placeholder de frame_size)
+   - Compila parámetros (cada `visit_param` hace `emit_alloca` + copia desde `x{i}`)
+   - Compila bloque de la función
+   - Calcula frame_size real (alineado a 16 bytes)
+   - Parchea prólogo con frame_size real
+   - Emite epílogo con label de retorno
+   - Restaura estado del builder
+
+### 8.7 Manejo de Scope y Tabla de Símbolos
+
+Las funciones utilizan la misma tabla de símbolos con scope anidado:
+
+- **Scope global**: contiene declaraciones del main y definiciones de funciones
+- **Scope de función**: creado al entrar en `_compile_function` con `parent` apuntando al scope global
+- **Parámetros**: se registran en el scope de la función mediante `visit_param`
+- **Variables locales**: se registran en el scope de la función mediante `visit_declaration`
+- **Acceso a variables globales**: se busca en el scope padre si no se encuentra en el scope actual
+
+### 8.8 Recursión
+
+La recursión es soportada automáticamente gracias al registro de activación:
+
+```
+// Código fuente
+fn factorial(int :n) : int {
+    if (n <= 1) {
+        return 1
+    }
+    int prev = factorial(n - 1)
+    return n * prev
+}
+
+// Código ARM64 generado
+foreign_func_factorial:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    sub sp, sp, #32
+    str x0, [x29, #-8]           // Guardar parámetro n
+    ldr x9, [x29, #-8]
+    cmp x9, #1
+    cset x10, le
+    cmp x10, #0
+    b.ne L1                      // Si n <= 1, ir al caso base
+    b L2
+L1:
+    mov x0, #1                   // Retornar 1
+    b factorial_exit
+L2:
+    ldr x11, [x29, #-8]          // Cargar n
+    sub x12, x11, #1             // n - 1
+    mov x0, x12                  // Preparar argumento
+    sub sp, sp, #64              // Caller save
+    str x9, [sp, #0]
+    str x10, [sp, #8]
+    str x11, [sp, #16]
+    str x12, [sp, #24]
+    str x13, [sp, #32]
+    str x14, [sp, #40]
+    str x15, [sp, #48]
+    bl foreign_func_factorial    // Llamada recursiva
+    ldr x9, [sp, #0]             // Caller restore
+    ldr x10, [sp, #8]
+    ldr x11, [sp, #16]
+    ldr x12, [sp, #24]
+    ldr x13, [sp, #32]
+    ldr x14, [sp, #40]
+    ldr x15, [sp, #48]
+    add sp, sp, #64
+    str x0, [x29, #-16]          // Guardar resultado de factorial(n-1)
+    ldr x13, [x29, #-8]          // Cargar n
+    ldr x14, [x29, #-16]         // Cargar factorial(n-1)
+    mul x15, x13, x14            // n * factorial(n-1)
+    mov x0, x15                  // Retornar resultado
+    b factorial_exit
+factorial_exit:
+    add sp, sp, #32
+    ldp x29, x30, [sp], #16
+    ret
+```
+
+Cada llamada recursiva crea un nuevo registro de activación, permitiendo que cada nivel tenga su propia copia de los parámetros y variables locales.
+
+### 8.9 Comentarios en Código Generado
+
+El compilador agrega comentarios descriptivos en el código ARM64 para facilitar la depuración:
+
+```asm
+// declare int x
+mov x9, #10
+str x9, [x29, #-8]
+// declare int y
+mov x10, #5
+str x10, [x29, #-16]
+// call sum(2 args)
+ldr x11, [x29, #-8]
+mov x0, x11
+ldr x12, [x29, #-16]
+mov x1, x12
+// caller save (x9-x15)
+sub sp, sp, #64
+str x9, [sp, #0]
+...
+bl foreign_func_sum
+// caller restore (x9-x15)
+...
+// function sum
+foreign_func_sum:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    sub sp, sp, #32
+    // declare int result
+    ...
+    // int arithmetic: +
+    add x11, x9, x10
+    ...
+    // return
+    mov x0, x12
+    b sum_exit
+```
+
+### 8.10 Ejemplo Completo
+
+**Código fuente:**
+```
+fn sum(int :a, int :b) : int {
+    int result = a + b
+    return result
+}
+
+int x = 10
+int y = 5
+sum(x, y)
+```
+
+**Código ARM64 generado (secciones relevantes):**
+
+```asm
+.global _start
+.section .bss
+buffer: .skip 32
+.section .text
+_start:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    // declare int x
+    mov x9, #10
+    str x9, [x29, #-8]
+    // declare int y
+    mov x10, #5
+    str x10, [x29, #-16]
+    // call sum(2 args)
+    ldr x11, [x29, #-8]
+    mov x0, x11
+    ldr x12, [x29, #-16]
+    mov x1, x12
+    // caller save (x9-x15)
+    sub sp, sp, #64
+    str x9, [sp, #0]
+    str x10, [sp, #8]
+    str x11, [sp, #16]
+    str x12, [sp, #24]
+    str x13, [sp, #32]
+    str x14, [sp, #40]
+    str x15, [sp, #48]
+    bl foreign_func_sum
+    // caller restore (x9-x15)
+    ldr x9, [sp, #0]
+    ldr x10, [sp, #8]
+    ldr x11, [sp, #16]
+    ldr x12, [sp, #24]
+    ldr x13, [sp, #32]
+    ldr x14, [sp, #40]
+    ldr x15, [sp, #48]
+    add sp, sp, #64
+    // Exit syscall
+    mov x0, #0
+    mov x8, #93
+    svc #0
+
+foreign_func_sum:
+    stp x29, x30, [sp, #-16]!
+    mov x29, sp
+    sub sp, sp, #32
+    str x0, [x29, #-8]
+    str x1, [x29, #-16]
+    // declare int result
+    ldr x9, [x29, #-8]
+    ldr x10, [x29, #-16]
+    // int arithmetic: +
+    add x11, x9, x10
+    str x11, [x29, #-24]
+    // return
+    ldr x12, [x29, #-24]
+    mov x0, x12
+    b sum_exit
+sum_exit:
+    add sp, sp, #32
+    ldp x29, x30, [sp], #16
+    ret
+```
+
+### 8.11 Limitaciones Actuales
+
+1. **Solo ARM64**: El soporte de funciones está implementado solo en `ARMBuilder`. `TACBuilder` (LLVM IR) aún no tiene soporte completo.
+2. **Máximo 8 parámetros**: La convención ARM64 usa x0-x7 para argumentos. Funciones con más de 8 parámetros requieren extensión.
+3. **Funciones void**: Aunque se soportan, no hay forma de usar el valor de retorno de funciones no-void en expresiones complejas sin asignar a variable.
+4. **Sin closures**: Las funciones no capturan variables del scope donde se definen, solo pueden acceder a parámetros y variables globales.
+5. **Sin funciones anidadas**: Las funciones no pueden declararse dentro de otras funciones (aunque sí pueden llamarse recursivamente).
