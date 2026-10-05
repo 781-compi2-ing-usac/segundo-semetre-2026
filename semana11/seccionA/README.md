@@ -198,9 +198,9 @@ El interprete (`AST/Visitor/interpreter.py`) ejecuta el AST despues de que el ty
 
 ### 3.2 Control de flujo (`AST/flow.py`)
 
-```
-FlowControl        → clase base (senales de control de flujo)
-  └── Return       → encapsula el valor retornado por una funcion
+```mermaid
+flowchart TD
+    A["FlowControl - clase base senales de control de flujo"] --> B["Return - encapsula el valor retornado por una funcion"]
 ```
 
 Cuando un `ReturnNode` se ejecuta, retorna un objeto `Return(value)`. Los metodos `visit_block`, `visit_if` y `visit_while` detectan esta senal con `isinstance(result, FlowControl)` y la propagan hacia arriba, permitiendo que el valor llegue de vuelta a `visit_function_call`.
@@ -329,33 +329,13 @@ Recibe codigo fuente en formato JSON y retorna los resultados.
 
 ### Flujo interno
 
-```
-┌─────────────┐
-│ POST /compile│
-│  (codigo)    │
-└──────┬──────┘
-       │
-       v
-┌──────────────┐
-│   Parser     │ → parser.parse(code) → AST (lista de nodos)
-└──────┬───────┘
-       │
-       v
-┌──────────────┐
-│ TypeChecker  │ → recorre cada nodo del AST
-│              │ → si hay errores, los retorna y se detiene
-└──────┬───────┘
-       │ (sin errores)
-       v
-┌──────────────┐
-│ Interpreter  │ → recorre cada nodo del AST
-│              │ → captura stdout con redirect_stdout
-└──────┬───────┘
-       │
-       v
-┌──────────────┐
-│  Response    │ → JSON con {"errors": [], "output": [...]}
-└──────────────┘
+```mermaid
+flowchart TD
+    A["POST /compile codigo"] --> B["Parser: parser.parse code - AST lista de nodos"]
+    B --> C["TypeChecker: recorre cada nodo del AST"]
+    C -->|hay errores| D["Retorna errores y se detiene"]
+    C -->|sin errores| E["Interpreter: recorre cada nodo del AST y captura stdout"]
+    E --> F["Response: JSON con errors y output"]
 ```
 
 Pasos detallados:
@@ -932,23 +912,17 @@ print(factorial(5))
 
 Cada llamada a función crea un nuevo registro de activación en el stack:
 
-```
-Direcciones altas
-┌──────────────────────────────────┐
-│ Return Address (x30)             │ FP + 8   ← guardado por stp
-│ Previous FP (x29)                │ FP + 0   ← guardado por stp, nuevo FP
-├──────────────────────────────────┤
-│ Parámetro 1 (copia desde x0)     │ FP - 8
-│ Parámetro 2 (copia desde x1)     │ FP - 16
-│ ...                              │
-├──────────────────────────────────┤
-│ Variable Local 1                 │
-│ Variable Local 2                 │
-│ ...                              │
-├──────────────────────────────────┤
-│ Return Value Slot                │
-└──────────────────────────────────┘ ← SP (alineado a 16 bytes)
-Direcciones bajas
+```mermaid
+block-beta
+    columns 1
+    RA["Return Address x30 - FP + 8"]
+    FP["Previous FP x29 - FP + 0 - nuevo FP"]
+    P1["Parametro 1 copia desde x0 - FP - 8"]
+    P2["Parametro 2 copia desde x1 - FP - 16"]
+    L1["Variable Local 1"]
+    L2["Variable Local 2"]
+    RV["Return Value Slot"]
+    SP["SP alineado a 16 bytes"]
 ```
 
 **Tamaño del frame**: `16 (FP+LR) + num_params*8 + num_locals*8 + 8 (return slot)`, redondeado a múltiplo de 16 para alineación ARM64.

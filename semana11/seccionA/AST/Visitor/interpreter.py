@@ -138,9 +138,8 @@ class Interpreter(Visitor):
         return None
 
     def visit_function_declaration(self, node: FunctionDeclarationNode):
-        params = [self.dispatch(param) for param in node.parameters]
-        function = Foreign(node, self.symbol_table, params)
-        self.symbol_table.add_symbol(node.func_name, function)
+        if self.symbol_table.get_symbol(node.func_name) is None:
+            self._register_function_signature(node)
         return
 
     def visit_function_call(self, node: FunctionCallNode):
@@ -162,3 +161,8 @@ class Interpreter(Visitor):
 
     def visit_array(self, node: ArrayNode):
         return ArrayValue([self.dispatch(element) for element in node.array])
+
+    def _register_function_signature(self, node: FunctionDeclarationNode):
+        params = [self.dispatch(param) for param in node.parameters]
+        function = Foreign(node, self.symbol_table, params)
+        self.symbol_table.add_symbol(node.func_name, function)

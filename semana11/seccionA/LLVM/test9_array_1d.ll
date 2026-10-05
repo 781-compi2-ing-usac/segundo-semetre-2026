@@ -7,15 +7,15 @@ declare i32 @printf(ptr, ...)
 define i32 @main() {
 entry:
     ; declare int arr
-    %_arr_139994816731216_ptr = alloca i32
-    store i32 1, ptr %_arr_139994816731216_ptr
-    %_arr_139994815417872_ptr = alloca i32
-    store i32 2, ptr %_arr_139994815417872_ptr
-    %_arr_139994816387088_ptr = alloca i32
-    store i32 3, ptr %_arr_139994816387088_ptr
-    %_arr_139994816020048_ptr = alloca i32
-    store i32 4, ptr %_arr_139994816020048_ptr
-    %_arr_139994813820112_ptr = alloca i32
-    store i32 5, ptr %_arr_139994813820112_ptr
+    %_arr_139921171903824_ptr = alloca i32
+    store i32 1, ptr %_arr_139921171903824_ptr
+    %_arr_139921169530320_ptr = alloca i32
+    store i32 2, ptr %_arr_139921169530320_ptr
+    %_arr_139921169897744_ptr = alloca i32
+    store i32 3, ptr %_arr_139921169897744_ptr
+    %_arr_139921171902352_ptr = alloca i32
+    store i32 4, ptr %_arr_139921171902352_ptr
+    %_arr_139921169807888_ptr = alloca i32
+    store i32 5, ptr %_arr_139921169807888_ptr
     ret i32 0
 }

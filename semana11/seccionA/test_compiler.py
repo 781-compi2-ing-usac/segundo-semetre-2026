@@ -12,6 +12,7 @@ from AST.Visitor.typechecker import TypeChecker
 from AST.Visitor.compiler import Compiler
 from AST.Builder.tac_builder import TACBuilder
 from AST.Builder.arm_builder import ARMBuilder
+from AST.nodes import FunctionDeclarationNode
 
 
 def generate_and_save(code: str, name: str):
@@ -30,6 +31,9 @@ def generate_and_save(code: str, name: str):
 
     # Typecheck
     checker = TypeChecker()
+    for node in ast:
+        if isinstance(node, FunctionDeclarationNode):
+            checker._register_function_signature(node)
     for node in ast:
         checker.dispatch(node)
 

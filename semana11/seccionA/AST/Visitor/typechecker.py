@@ -144,6 +144,9 @@ class TypeChecker(Visitor):
     def visit_block(self, node: BlockNode):
         prev_table = self.symbol_table
         self.symbol_table = SymTable(parent=prev_table)
+        for stmt in node.statements:
+            if isinstance(stmt, FunctionDeclarationNode):
+                self._register_function_signature(stmt)
         for statement in node.statements:
             self.dispatch(statement)
         self.symbol_table = prev_table
@@ -177,9 +180,16 @@ class TypeChecker(Visitor):
         self.dispatch(node.block)
 
     def visit_function_declaration(self, node: FunctionDeclarationNode):
-        params_types = [self.dispatch(param) for param in node.parameters]
-        func_type = self.dispatch(node.return_type)
-        self.symbol_table.add_symbol(node.func_name, (params_types, func_type))
+        existing = self.symbol_table.symbols.get(node.func_name)
+        if existing is None:
+            params_types = [self.dispatch(param) for param in node.parameters]
+            func_type = self.dispatch(node.return_type)
+            self.symbol_table.add_symbol(node.func_name, (params_types, func_type))
+            _, func_type = self.symbol_table.symbols[node.func_name]
+        else:
+            _, func_type = existing
+            for param in node.parameters:
+                self.dispatch(param)
         for statement in node.block.statements:
             statement_type = self.dispatch(statement)
             if isinstance(statement, ReturnNode) and statement_type != func_type:
@@ -264,3 +274,16 @@ class TypeChecker(Visitor):
                 f"Array elements must have the same type, got {element_types}", node
             )
         return ArrayType(first_type, (len(node.array),))
+
+    def _register_function_signature(self, node: FunctionDeclarationNode):
+        params_types = []
+        for param in node.parameters:
+            base_type = param.param_type.value
+            if param.array_dimensions:
+                params_types.append(
+                    ArrayType(base_type, (None,) * len(param.array_dimensions))
+                )
+            else:
+                params_types.append(base_type)
+        func_type = node.return_type.value
+        self.symbol_table.add_symbol(node.func_name, (params_types, func_type))

@@ -9,6 +9,7 @@ from AST.Visitor.interpreter import Interpreter
 from AST.Builder.tac_builder import TACBuilder
 from AST.Builder.arm_builder import ARMBuilder
 from AST.errors import CompilerError, ParseError
+from AST.nodes import FunctionDeclarationNode
 
 
 app = Flask(__name__)
@@ -41,7 +42,9 @@ def compile():
 
     try:
         checker = TypeChecker()
-
+        for node in ast:
+            if isinstance(node, FunctionDeclarationNode):
+                checker._register_function_signature(node)
         for node in ast:
             checker.dispatch(node)
 
@@ -78,6 +81,9 @@ def compile():
         
         else:
             interpreter = Interpreter()
+            for node in ast:
+                if isinstance(node, FunctionDeclarationNode):
+                    interpreter._register_function_signature(node)
             
             output_buffer = StringIO()
             with redirect_stdout(output_buffer):
