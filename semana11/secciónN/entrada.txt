@@ -1,0 +1,32 @@
+
+def saluda() {
+    println!(99);
+}
+saluda();
+def cuenta() {
+    let k = 2;
+    while k != 0 {
+        println!(k);
+        let k = k - 1;
+    }
+}
+cuenta();
+cuenta();
+let v = saluda();
+println!(v);
+def dame() {
+    return 6;
+}
+println!(dame());
+def temprano() {
+    println!(1);
+    return 2;
+    println!(3);
+}
+println!(temprano());
+def mitad() {
+    return 2.5;
+}
+println!(mitad());
+
+

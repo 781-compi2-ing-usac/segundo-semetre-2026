@@ -1,0 +1,36 @@
+@startuml Stack y heap en ARM64
+!theme plain
+title Stack vs heap en ARM64 (flujo + memoria)
+
+note right
+  Memoria (altas -> bajas):
+  .text (codigo)
+  .data/.bss (numero, fmt, heap_base..heap_end)
+  HEAP: x20=ptr, x21=end, crece hacia arriba
+  STACK: sp, fp=x29, lr=x30, crece hacia abajo, 16B alineado
+  PUSH: sub sp,#8 + str | POP: ldr + add sp,#8
+  Frame: stp fp,lr,[sp,#-16]!
+end note
+
+start
+:Reservar: stack (sub sp) o heap (bump/malloc);
+if (Stack?) then (si)
+  :Reservar stack: sub sp + str\n(frame: stp fp,lr);
+  :Operar con x9-x15;
+  :Liberar simetrico: ldr + add sp\n(ldp fp,lr + ret);
+else (heap)
+  :x0 = n bytes;
+  if (Con libc?) then (si)
+    :bl malloc -> x0=ptr;\nusar [ptr];\nbl free;
+  else (bump main.asm)
+    :x9 = x20 + x0;\ncmp x9, x21;
+    if (Sin espacio?) then (si)
+      :_panic_oom (exit 1);
+      stop
+    else (no)
+      :x0 = x20;\nx20 = x9;
+    endif
+  endif
+endif
+stop
+@enduml
