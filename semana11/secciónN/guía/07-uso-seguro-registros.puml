@@ -1,0 +1,50 @@
+@startuml Uso seguro de registros ARM64 (AAPCS64)
+!theme plain
+title Flujo seguro de registros ARM64 — AAPCS64
+
+start
+:Entrar a función (main / _fn);
+note right
+  Banco entero: x0-x30 (x=64b, w=32b bajos)
+  FP=x29, LR=x30, SP, xzr=0
+  Args: x0-x7, Ret: x0
+  Caller-saved: x0-x18 (se pierden en bl)
+  Callee-saved: x19-x28 (debes preservarlos)
+  Temporales expr: x9-x15
+end note
+
+:Prólogo — stp x29, x30, [sp, #-16]!\n+ mov x29, sp;
+note right: Guarda FP+LR de una vez.\nMantiene SP % 16 == 0.
+
+if (¿Usarás x19-x28?) then (sí)
+  :Salvarlos — stp x19,x20,[sp,#-16]! ...;
+else (no)
+endif
+
+:Evaluar expresión solo con x9-x15;
+note right: mov / ldr =sym / add / sub / mul
+
+if (¿Llamarás a bl printf / bl _fn?) then (sí)
+  :Mover args a x0-x7\n(x0=fmt, w1=dato para %d);
+  :Verificar SP % 16 == 0;
+  if (¿SP desalineado?) then (sí)
+    :sub sp, sp, #8 (alinear);\nmarcar para restaurar;
+  else (no)
+  endif
+  :bl destino;
+  :Si alineaste: add sp, sp, #8;
+  note right: Tras bl, x0-x18 quedaron\nclobberados. Recarga\ntemporales si los necesitas.
+else (no: función leaf)
+endif
+
+:Dejar retorno en w0/x0\n(mov w0, #0);
+
+if (¿Salvaste x19-x28?) then (sí)
+  :Restaurarlos — ldp ...;
+else (no)
+endif
+
+:Epílogo — ldp x29, x30, [sp], #16\n+ ret;
+stop
+
+@enduml
