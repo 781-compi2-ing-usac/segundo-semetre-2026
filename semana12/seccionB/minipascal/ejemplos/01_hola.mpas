@@ -1,0 +1,26 @@
+(* El programa más pequeño posible en MiniPascal.
+
+   Comparen la forma con la de su proyecto:
+
+     MiniPascal                    OxigenScript
+     ----------                    ------------
+     program Hola;                 fn main() {
+     begin                             ...
+       writeln('...');             }
+     end.
+
+   El punto final después del `end` no es adorno: es parte de la gramática.
+
+   Este comentario usa el delimitador de paréntesis y no el de llaves,
+   porque adentro hay llaves y un comentario con llaves termina en la
+   PRIMERA llave de cierre que aparezca. Es una limitación real de Pascal,
+   y un buen recordatorio de que las reglas del lexer tienen consecuencias.
+   Vean la sección "Los dos comentarios" del README.                      *)
+
+program Hola;
+begin
+  writeln('Hola desde MiniPascal');
+  writeln(2026);
+  writeln(true);
+  writeln('una comilla se escribe as''i');
+end.
