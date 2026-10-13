@@ -18,3 +18,5 @@ arm/03_variables
 arm/04_brk
 arm/05_alloc_tabla
 arm/06_prueba
+arm/06_control_flujo
+arm/07_prueba

@@ -95,6 +95,19 @@ OPERADORES = {
     '/': 'sdiv',    # signed divide: división ENTERA, ver la nota de abajo
 }
 
+# Operador de MiniPascal -> condición de ARM64 para `cset` / `b.<cond>`.
+# `cmp a, b` no devuelve nada: deja el resultado en cuatro banderas (NZCV),
+# y cada condición es una forma de leerlas. eq = equal, ne = not equal,
+# lt = less than, gt = greater than, le = less or equal, ge = greater or equal.
+COMPARADORES = {
+    '==': 'eq',
+    '!=': 'ne',
+    '<':  'lt',
+    '>':  'gt',
+    '<=': 'le',
+    '>=': 'ge',
+}
+
 
 # ---------------------------------------------------------------------------
 # El HEAP: la memoria que se le pide al kernel mientras el programa corre.
@@ -168,6 +181,30 @@ class GeneradorARM64(Visitante):
         # ¿El programa pidió memoria al heap? Si no, el .s no necesita ni la
         # tabla ni la rutina `alloc`, y no las escribimos.
         self.usa_heap = False
+
+        # Etiquetas: cada `if` y cada `while` necesita saltar a lugares que
+        # tienen nombre, y dos `if` distintos NO pueden compartir nombre. Un
+        # contador que solo sube basta para que nunca se repitan.
+        self.contador_etiquetas = 0
+
+        # Los ciclos que estamos recorriendo ahora mismo, el más interno al
+        # final. Un `break` o `continue` consulta aquí a dónde saltar.
+        self.ciclos = []
+
+    # -- etiquetas ----------------------------------------------------------
+
+    def nueva_etiqueta(self, prefijo):
+        """Un nombre que no se ha usado antes: `.Lwhile_fin_3`.
+
+        El `.L` inicial le dice al ensamblador que es una etiqueta LOCAL: se
+        usa para saltar, pero no aparece en la tabla de símbolos del binario.
+        """
+        self.contador_etiquetas += 1
+        return f'.L{prefijo}_{self.contador_etiquetas}'
+
+    def poner_etiqueta(self, etiqueta):
+        """Escribir `etiqueta:` en este punto del código."""
+        self.lineas.append(f'{etiqueta}:')
 
     # -- escribir texto -----------------------------------------------------
 
@@ -259,6 +296,42 @@ class GeneradorARM64(Visitante):
         nodo.expresion.aceptar(self)
         self.emitir('neg x0, x0', 'x0 = -x0')
 
+    def visitar_Comparacion(self, nodo):
+        # El mismo esqueleto de una operación binaria: izquierdo, empujar,
+        # derecho, recuperar. Lo único distinto es el final: en vez de
+        # `add`, un `cmp` seguido de `cset`.
+        if nodo.operador not in COMPARADORES:
+            raise NotImplementedError(
+                f"[generador] Comparador '{nodo.operador}' no soportado "
+                f"(línea {nodo.linea})."
+            )
+
+        nodo.izquierdo.aceptar(self)
+        self.emitir(EMPUJAR, 'guardar el operando izquierdo en la pila')
+
+        nodo.derecho.aceptar(self)
+        self.emitir('mov x1, x0', 'x1 = operando derecho')
+        self.emitir(SACAR, 'x0 = operando izquierdo (de vuelta de la pila)')
+
+        condicion = COMPARADORES[nodo.operador]
+        self.emitir('cmp x0, x1', 'comparar: el resultado queda en las banderas, no en un registro')
+        self.emitir(f'cset x0, {condicion}',
+                    f'x0 = 1 si izquierdo {nodo.operador} derecho, si no 0')
+
+        # ------------------------------------------------------------------
+        # LO QUE FALTA AQUÍ:
+        #   * Una comparación deja 1 o 0 en x0. Si la imprimen con writeln,
+        #     el generador escribe `1` y el intérprete escribe `true`.
+        #     Otro desacuerdo silencioso entre los dos caminos.
+        #   * Un humano que escribe `if a < b` a mano NO usaría `cset`:
+        #     saltaría directo con `cmp x0, x1` + `b.ge`. Aquí pasamos por
+        #     un 0/1 en x0 porque así una comparación es una expresión como
+        #     cualquier otra y se puede guardar, empujar o imprimir.
+        #   * `&&` y `||` con corto circuito: no están en MiniPascal, y
+        #     por eso no aparecen aquí. Si el lenguaje de ustedes los
+        #     tiene, no se arman con `cset`: se arman con saltos.
+        # ------------------------------------------------------------------
+
     # -- INSTRUCCIONES ------------------------------------------------------
 
     def visitar_Declaracion(self, nodo):
@@ -283,7 +356,14 @@ class GeneradorARM64(Visitante):
         # es desperdicio a propósito, no un error.
         self.proximo_offset += 16
         offset = self.proximo_offset
-        self.emitir('sub sp, sp, #16', f'reservar la celda de {nodo.nombre}')
+
+        # Fíjense en lo que ESTE método ya no escribe: el `sub sp, sp, #16`
+        # de la sesión de variables. Con `if` y `while`, una declaración
+        # puede ejecutarse cero veces (rama no tomada) o mil (dentro de un
+        # ciclo), y un `sub sp` por declaración deja de coincidir con el
+        # offset que se calculó al generar. Ahora el frame completo se
+        # reserva UNA vez, en el prólogo, con el tamaño final. Ver
+        # `ensamblar_archivo` y la idea 10 del README.
 
         # El entorno de compilación es lo que hace que la línea de abajo
         # sepa, más adelante, dónde buscar 'nodo.nombre': una consulta a
@@ -313,7 +393,7 @@ class GeneradorARM64(Visitante):
         # `nombre := expresion;`  — la variable YA existe: solo se busca
         # su offset (ya reservado por una Declaracion anterior) y se
         # sobrescribe. A diferencia de Declaracion, esto NUNCA mueve sp:
-        # reservar espacio pasa una sola vez, al declarar.
+        # reservar espacio pasa una sola vez, al generar la declaración.
         offset = self.offsets.get(nodo.nombre)
         if offset is None:
             raise NotImplementedError(
@@ -350,8 +430,7 @@ class GeneradorARM64(Visitante):
         )
 
         self.proximo_offset += 16
-        offset = self.proximo_offset
-        self.emitir('sub sp, sp, #16', f'reservar la celda del puntero de {nodo.nombre}')
+        offset = self.proximo_offset          # la celda ya viene en el frame
         self.offsets[nodo.nombre] = offset
 
         # N enteros de 8 bytes cada uno. El tamaño sale del texto del
@@ -438,6 +517,110 @@ class GeneradorARM64(Visitante):
         for instruccion in nodo.instrucciones:
             instruccion.aceptar(self)
 
+    # -- CONTROL DE FLUJO: etiquetas y saltos -------------------------------
+
+    def saltar_si_falso(self, etiqueta):
+        """La condición ya está en x0 (0 = falso, 1 = verdadero). Si es
+        falso, saltar a `etiqueta`; si no, seguir con la instrucción de abajo."""
+        self.emitir('cmp x0, #0', 'x0 es 0 (falso) o 1 (verdadero)')
+        self.emitir(f'b.eq {etiqueta}', 'si es falso, saltar')
+
+    def visitar_If(self, nodo):
+        # if <condicion> then <bloque_si> [else <bloque_no>];
+        #
+        # Sin else:                 Con else:
+        #
+        #       <condicion>               <condicion>
+        #       si falso -> fin           si falso -> sino
+        #       <bloque_si>               <bloque_si>
+        #   fin:                          saltar a fin
+        #                             sino:
+        #                                 <bloque_no>
+        #                             fin:
+        self.lineas.append('')
+        self.comentario(f'if ...  — línea {nodo.linea}')
+
+        fin = self.nueva_etiqueta('if_fin')
+        nodo.condicion.aceptar(self)                 # x0 = 0 o 1
+
+        if nodo.bloque_no is None:
+            self.saltar_si_falso(fin)
+            nodo.bloque_si.aceptar(self)
+        else:
+            sino = self.nueva_etiqueta('sino')
+            self.saltar_si_falso(sino)
+            nodo.bloque_si.aceptar(self)
+            self.emitir(f'b {fin}', 'terminó el then: saltarse el else')
+            self.poner_etiqueta(sino)
+            nodo.bloque_no.aceptar(self)
+
+        self.poner_etiqueta(fin)
+
+    def visitar_While(self, nodo):
+        # [etiqueta:] while <condicion> do <cuerpo>;
+        #
+        #   inicio:
+        #       <condicion>
+        #       si falso -> fin
+        #       <cuerpo>
+        #       saltar a inicio          <- el salto hacia ATRÁS es el ciclo
+        #   fin:
+        self.lineas.append('')
+        self.comentario(f'while ...  — línea {nodo.linea}')
+
+        inicio = self.nueva_etiqueta('while_inicio')
+        fin = self.nueva_etiqueta('while_fin')
+
+        # `continue` salta a `inicio` (volver a evaluar la condición) y
+        # `break` salta a `fin`. Se registran ANTES de generar el cuerpo,
+        # porque es adentro del cuerpo donde se van a usar.
+        self.ciclos.append({'nombre': nodo.etiqueta, 'continuar': inicio, 'salir': fin})
+
+        self.poner_etiqueta(inicio)
+        nodo.condicion.aceptar(self)
+        self.saltar_si_falso(fin)
+        nodo.cuerpo.aceptar(self)
+        self.emitir(f'b {inicio}', 'volver a evaluar la condición')
+        self.poner_etiqueta(fin)
+
+        self.ciclos.pop()
+
+        # ------------------------------------------------------------------
+        # LO QUE FALTA AQUÍ:
+        #   * `repeat ... until` y `case`: el mecanismo es el mismo (cmp,
+        #     saltos, etiquetas). Repeat evalúa la condición AL FINAL; case
+        #     es una cadena de cmp + b.eq, una por rama.
+        #   * Si la condición no es boolean (`while 5 + 3 do`), el
+        #     intérprete reporta un error semántico y este código simplemente
+        #     toma x0 != 0 como verdadero.
+        # ------------------------------------------------------------------
+
+    def ciclo_destino(self, nodo, instruccion):
+        """El ciclo al que se refiere un break/continue: el más interno, o el
+        que tenga la etiqueta indicada."""
+        if not self.ciclos:
+            raise NotImplementedError(
+                f"[generador] '{instruccion}' fuera de un ciclo "
+                f"(línea {nodo.linea})."
+            )
+        if nodo.etiqueta is None:
+            return self.ciclos[-1]
+        for ciclo in reversed(self.ciclos):
+            if ciclo['nombre'] == nodo.etiqueta:
+                return ciclo
+        raise NotImplementedError(
+            f"[generador] No hay un ciclo con la etiqueta "
+            f"'{nodo.etiqueta}' para '{instruccion}' (línea {nodo.linea})."
+        )
+
+    def visitar_Break(self, nodo):
+        destino = self.ciclo_destino(nodo, 'break')['salir']
+        self.emitir(f'b {destino}', f'break: saltar al final del ciclo  — línea {nodo.linea}')
+
+    def visitar_Continue(self, nodo):
+        destino = self.ciclo_destino(nodo, 'continue')['continuar']
+        self.emitir(f'b {destino}', f'continue: saltar a la condición  — línea {nodo.linea}')
+
     def visitar_Programa(self, nodo):
         nodo.bloque.aceptar(self)
 
@@ -454,6 +637,16 @@ class GeneradorARM64(Visitante):
         ARM64 necesita alrededor: la sección de datos, la etiqueta de
         entrada, el prólogo y el epílogo."""
         cuerpo = '\n'.join(self.lineas)
+
+        # El tamaño del frame se conoce SOLO ahora, cuando ya se recorrió
+        # todo el programa: es el último offset que se repartió. Por eso la
+        # reserva se escribe aquí, en el prólogo, y no donde está cada `var`.
+        if self.proximo_offset > 0:
+            reserva = (f"    sub sp, sp, #{self.proximo_offset}"
+                       f"          // reservar el frame completo: "
+                       f"{self.proximo_offset // 16} celdas de 16 bytes\n")
+        else:
+            reserva = ''
 
         # El heap solo existe en el .s si el programa lo usa.
         bss = f'\n{SECCION_BSS}' if self.usa_heap else ''
@@ -488,14 +681,12 @@ main:
     // main no sabría a dónde volver.
     stp x29, x30, [sp, #-16]!
     mov x29, sp
-
+{reserva}
 {cuerpo}
 
     // Epílogo: devolver 0 y restaurar lo que guardamos en el prólogo.
     mov w0, #0
-    mov sp, x29             // soltar TODO lo reservado con 'sub sp' de una
-                             // vez (una por cada variable declarada), sin
-                             // tener que deshacerlas una por una
+    mov sp, x29             // soltar TODO el frame de una vez
     ldp x29, x30, [sp], #16
     ret
 {rutinas}'''
