@@ -30,6 +30,19 @@ Todo lo de la Sesión 1, más:
     * NUEVO: leer una variable dentro de una expresión
     * NUEVO: reasignar una variable ya declarada (`nombre := expr;`)
 
+Y lo que se fue sumando después, en la misma carpeta (cada parte tiene
+su sección en el README):
+
+    * arreglos de `integer` en el HEAP: `alloc` con brk y una tabla
+      de bloques (visitar_DeclaracionArreglo, visitar_Indexado,
+      visitar_AsignacionIndexada)
+    * comparaciones, `if`/`else`, `while`, `break` y `continue`, con
+      etiquetas únicas (visitar_Comparacion, visitar_If, visitar_While)
+    * funciones con parámetros y retorno `integer`, recursión incluida
+      (visitar_Funcion, visitar_Llamada, visitar_Return)
+    * CAMBIÓ: el frame ya no se reserva con un `sub sp` por variable
+      sino de una vez, en el prólogo (ver la idea 10 del README)
+
 Cualquier otro nodo produce un mensaje claro diciendo qué falta (lo hace
 la clase base, en `visitante.py`). Esa lista de mensajes es su hoja de
 ruta: control de flujo, funciones, memoria. Vayan tachándola.
@@ -191,6 +204,15 @@ class GeneradorARM64(Visitante):
         # final. Un `break` o `continue` consulta aquí a dónde saltar.
         self.ciclos = []
 
+        # FUNCIONES. Cada una se genera por separado y su texto se pega
+        # DESPUÉS de main, porque el código de una función no puede quedar
+        # en medio del de main: el procesador lo ejecutaría de corrido.
+        self.funcion_actual = None      # nombre de la función en curso (None = main)
+        self.etiqueta_retorno = None    # a dónde salta un `return` de la función en curso
+        self.funciones = {}             # nombre -> cuántos parámetros tiene
+        self.textos_de_funciones = []   # el .s de cada función, ya armado
+        self.llamadas = []              # (nombre, argumentos, línea): se verifican al final
+
     # -- etiquetas ----------------------------------------------------------
 
     def nueva_etiqueta(self, prefijo):
@@ -256,8 +278,9 @@ class GeneradorARM64(Visitante):
             raise NotImplementedError(
                 f"[generador] '{nodo.nombre}' no está en el entorno de "
                 f"compilación (línea {nodo.linea}). ¿Falta su 'var'? "
-                f"(los parámetros de función y los campos de struct "
-                f"todavía no se generan)."
+                f"(dentro de una función solo se ven sus parámetros y sus "
+                f"variables; las de afuera todavía no. Los campos de struct "
+                f"tampoco se generan.)"
             )
         self.emitir(f'ldr x0, [x29, #-{offset}]', f'x0 = {nodo.nombre}')
 
@@ -621,6 +644,163 @@ class GeneradorARM64(Visitante):
         destino = self.ciclo_destino(nodo, 'continue')['continuar']
         self.emitir(f'b {destino}', f'continue: saltar a la condición  — línea {nodo.linea}')
 
+    # -- FUNCIONES: un frame por llamada ------------------------------------
+
+    def visitar_Funcion(self, nodo):
+        # `function nombre(p1: integer, p2: integer): integer; begin ... end;`
+        #
+        # Declarar una función NO escribe nada en el flujo de main: su
+        # código se genera aparte y se pega después de main. Aquí se
+        # guarda el estado de main, se genera la función con un estado
+        # limpio (sus propios offsets, su propio frame) y se vuelve.
+        if self.funcion_actual is not None:
+            raise NotImplementedError(
+                f"[generador] Una función dentro de otra función todavía no "
+                f"(línea {nodo.linea})."
+            )
+        if nodo.nombre in self.funciones:
+            raise NotImplementedError(
+                f"[generador] La función '{nodo.nombre}' ya fue declarada "
+                f"(línea {nodo.linea})."
+            )
+        if nodo.tipo_retorno != 'integer' or any(p.tipo != 'integer' for p in nodo.parametros):
+            raise NotImplementedError(
+                f"[generador] Por ahora solo sé generar funciones con "
+                f"parámetros y retorno 'integer'. Revisa '{nodo.nombre}' "
+                f"(línea {nodo.linea})."
+            )
+        if len(nodo.parametros) > 8:
+            raise NotImplementedError(
+                f"[generador] '{nodo.nombre}' tiene más de 8 parámetros "
+                f"(línea {nodo.linea}). Del noveno en adelante irían por la "
+                f"pila, y eso todavía no se genera."
+            )
+
+        # Se registra ANTES de generar el cuerpo: una función recursiva
+        # se llama a sí misma desde adentro.
+        self.funciones[nodo.nombre] = len(nodo.parametros)
+
+        self.lineas.append('')
+        self.comentario(f"function {nodo.nombre} — línea {nodo.linea}: "
+                        f"su código va después de main")
+
+        # --- estado limpio para la función ----------------------------------
+        guardado = (self.lineas, self.offsets, self.proximo_offset, self.ciclos)
+        self.lineas, self.offsets, self.proximo_offset, self.ciclos = [], {}, 0, []
+        self.funcion_actual = nodo.nombre
+        self.etiqueta_retorno = self.nueva_etiqueta(f'ret_{nodo.nombre}')
+
+        # Cada parámetro recibe su celda en el frame, igual que una `var`.
+        # Llegan en x0, x1, x2... y el prólogo los copia ahí.
+        for parametro in nodo.parametros:
+            self.proximo_offset += 16
+            self.offsets[parametro.nombre] = self.proximo_offset
+
+        nodo.cuerpo.aceptar(self)
+
+        cuerpo = '\n'.join(self.lineas)
+        frame = self.proximo_offset          # parámetros + locales, ya contados
+
+        # --- armar el texto de la función -----------------------------------
+        def fila(instruccion, comentario):
+            return f'    {instruccion:<28} // {comentario}'
+
+        partes = [
+            f'fn_{nodo.nombre}:',
+            fila('stp x29, x30, [sp, #-16]!', 'guardar fp y lr de QUIEN LLAMÓ'),
+            fila('mov x29, sp', 'fp de ESTA llamada'),
+        ]
+        if frame > 0:
+            partes.append(fila(f'sub sp, sp, #{frame}',
+                               f'el frame de ESTA llamada: {frame // 16} celda(s)'))
+        for i, parametro in enumerate(nodo.parametros):
+            offset = self.offsets[parametro.nombre]
+            partes.append(fila(f'str x{i}, [x29, #-{offset}]', f'{parametro.nombre} = x{i}'))
+        partes.append(cuerpo)
+        partes.append(fila('mov x0, #0', 'el cuerpo terminó sin `return`: 0'))
+        partes.append(f'{self.etiqueta_retorno}:')
+        partes.append(fila('mov sp, x29', 'soltar el frame de esta llamada'))
+        partes.append(fila('ldp x29, x30, [sp], #16', 'restaurar fp y lr de quien llamó'))
+        partes.append(fila('ret', 'volver a la instrucción siguiente al bl'))
+        self.textos_de_funciones.append('\n'.join(partes) + '\n')
+
+        # --- volver al estado de main ---------------------------------------
+        self.lineas, self.offsets, self.proximo_offset, self.ciclos = guardado
+        self.funcion_actual = None
+        self.etiqueta_retorno = None
+
+        # ------------------------------------------------------------------
+        # LO QUE FALTA AQUÍ:
+        #   * Las variables de AFUERA (globales) no se ven adentro de la
+        #     función: cada función tiene su propia tabla de offsets, medidos
+        #     desde SU x29. El intérprete sí las ve (scoping estático); este
+        #     generador responde con un error claro. Resolverlo es decidir
+        #     DÓNDE viven las variables globales para que cualquier función
+        #     las alcance.
+        #   * Más de 8 parámetros, y parámetros que no son enteros
+        #     (arreglos, records, booleanos).
+        #   * Funciones dentro de funciones, y que devuelvan algo que no sea
+        #     un entero.
+        # ------------------------------------------------------------------
+
+    def visitar_Llamada(self, nodo):
+        # `nombre(arg1, arg2, ...)` como expresión: deja el resultado en x0,
+        # igual que cualquier otra expresión.
+        #
+        # La convención de AArch64 pone los primeros 8 argumentos en x0-x7.
+        # El problema: calcular el argumento 2 usa x0 y x1 (el modelo de pila
+        # de siempre), así que NO se puede dejar el argumento 1 en x0 y
+        # seguir. Solución: calcular todos, empujar cada uno a la pila, y al
+        # final sacarlos en orden inverso hacia x0, x1, x2...
+        cantidad = len(nodo.argumentos)
+        if cantidad > 8:
+            raise NotImplementedError(
+                f"[generador] Una llamada con más de 8 argumentos "
+                f"(línea {nodo.linea}) todavía no."
+            )
+
+        self.llamadas.append((nodo.nombre, cantidad, nodo.linea))
+        self.comentario(f"{nodo.nombre}(...)  — llamada, línea {nodo.linea}")
+
+        for argumento in nodo.argumentos:
+            argumento.aceptar(self)                  # x0 = el argumento
+            self.emitir(EMPUJAR, 'guardar el argumento en la pila')
+
+        for i in reversed(range(cantidad)):
+            self.emitir(f'ldr x{i}, [sp], #16', f'x{i} = argumento {i + 1}')
+
+        self.emitir(f'bl fn_{nodo.nombre}', 'x0 = lo que devuelve la función')
+
+    def visitar_Return(self, nodo):
+        # `return expresion;` — el valor queda en x0 y se salta al epílogo
+        # de la función en curso.
+        if self.funcion_actual is None:
+            raise NotImplementedError(
+                f"[generador] 'return' fuera de una función "
+                f"(línea {nodo.linea})."
+            )
+        nodo.expresion.aceptar(self)
+        self.emitir(f'b {self.etiqueta_retorno}',
+                    f'return: salir de {self.funcion_actual}  — línea {nodo.linea}')
+
+    def verificar_llamadas(self):
+        """Se hace AL FINAL, no en cada llamada: una función puede llamar a
+        otra que todavía no se ha visto (esPar llama a esImpar, que aparece
+        más abajo). El ensamblador no tiene ese problema, porque resuelve
+        las etiquetas cuando ya leyó todo el archivo."""
+        for nombre, cantidad, linea in self.llamadas:
+            if nombre not in self.funciones:
+                raise NotImplementedError(
+                    f"[generador] La función '{nombre}' (línea {linea}) no "
+                    f"está declarada, o es una función embebida, que "
+                    f"todavía no se genera."
+                )
+            if self.funciones[nombre] != cantidad:
+                raise NotImplementedError(
+                    f"[generador] '{nombre}' espera {self.funciones[nombre]} "
+                    f"argumento(s), recibió {cantidad} (línea {linea})."
+                )
+
     def visitar_Programa(self, nodo):
         nodo.bloque.aceptar(self)
 
@@ -630,6 +810,7 @@ class GeneradorARM64(Visitante):
         """Recorre el árbol y devuelve el texto del archivo .s completo."""
         self.lineas = []
         arbol.aceptar(self)
+        self.verificar_llamadas()
         return self.ensamblar_archivo(arbol.nombre)
 
     def ensamblar_archivo(self, nombre_programa):
@@ -651,6 +832,14 @@ class GeneradorARM64(Visitante):
         # El heap solo existe en el .s si el programa lo usa.
         bss = f'\n{SECCION_BSS}' if self.usa_heap else ''
         rutinas = RUTINA_ALLOC if self.usa_heap else ''
+
+        # Las funciones van DESPUÉS del `ret` de main, nunca en medio.
+        funciones = ''
+        if self.textos_de_funciones:
+            funciones = ('\n// ----------------------------------------------------------\n'
+                         '// Funciones del programa\n'
+                         '// ----------------------------------------------------------\n'
+                         + '\n'.join(self.textos_de_funciones))
 
         return f'''// ==========================================================
 // Generado automáticamente por MiniPascal v6
@@ -689,4 +878,4 @@ main:
     mov sp, x29             // soltar TODO el frame de una vez
     ldp x29, x30, [sp], #16
     ret
-{rutinas}'''
+{rutinas}{funciones}'''

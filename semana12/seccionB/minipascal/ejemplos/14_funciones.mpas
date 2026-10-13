@@ -1,0 +1,88 @@
+(* Funciones: parámetros, valor de retorno, recursión y variables locales.
+   Se compila con --compilar y cada función sale como una etiqueta con su
+   propio prólogo y epílogo; al ejecutarlo debe dar lo mismo que el
+   intérprete. Solo hay `integer`: ni booleanos ni arreglos por parámetro. *)
+
+program Funciones;
+begin
+  (* 1. La más simple: un parámetro, un return *)
+  function cuadrado(n: integer): integer;
+  begin
+    return n * n;
+  end;
+
+  writeln(cuadrado(6));            (* 36 *)
+
+  (* 2. Varios parámetros: llegan en x0, x1, x2 *)
+  function suma3(a: integer, b: integer, c: integer): integer;
+  begin
+    return a + b + c;
+  end;
+
+  writeln(suma3(1, 2, 3));         (* 6 *)
+
+  (* 3. Una llamada como argumento de otra *)
+  writeln(suma3(cuadrado(2), cuadrado(3), 1));   (* 4 + 9 + 1 = 14 *)
+
+  (* 4. Recursión simple: cada llamada tiene SU PROPIO n *)
+  function factorial(n: integer): integer;
+  begin
+    if n <= 1 then begin
+      return 1;
+    end;
+    return n * factorial(n - 1);
+  end;
+
+  writeln(factorial(5));           (* 120 *)
+
+  (* 5. Recursión doble: fibonacci se llama a sí misma DOS veces *)
+  function fibonacci(n: integer): integer;
+  begin
+    if n < 2 then begin
+      return n;
+    end;
+    return fibonacci(n - 1) + fibonacci(n - 2);
+  end;
+
+  writeln(fibonacci(10));          (* 55 *)
+
+  (* 6. Variables locales y un ciclo adentro de una función *)
+  function sumaHasta(n: integer): integer;
+  begin
+    var i: integer := 1;
+    var total: integer := 0;
+    while i <= n do begin
+      total := total + i;
+      i := i + 1;
+    end;
+    return total;
+  end;
+
+  writeln(sumaHasta(100));         (* 5050 *)
+
+  (* 7. Recursión mutua: esPar llama a esImpar, que aparece MÁS ABAJO.
+        Devuelven 1 o 0: los booleanos todavía no se generan. *)
+  function esPar(n: integer): integer;
+  begin
+    if n == 0 then begin
+      return 1;
+    end;
+    return esImpar(n - 1);
+  end;
+
+  function esImpar(n: integer): integer;
+  begin
+    if n == 0 then begin
+      return 0;
+    end;
+    return esPar(n - 1);
+  end;
+
+  writeln(esPar(10));              (* 1 *)
+  writeln(esImpar(10));            (* 0 *)
+
+  (* 8. Una variable de main NO se mezcla con la de la función *)
+  var n: integer := 7;
+  writeln(cuadrado(n + 1));        (* 64 *)
+  writeln(n);                      (* 7: la n de cuadrado era otra *)
+end.

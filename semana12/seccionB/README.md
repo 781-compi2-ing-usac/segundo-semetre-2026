@@ -1,4 +1,4 @@
-# Heap y control de flujo en ARM64
+# Heap, control de flujo y funciones en ARM64
 
 Organización de Lenguajes y Compiladores 2 — Sección B · semana 12 (martes 13/10/2026)
 Material de apoyo para el Proyecto 2 (**OxigenNative**) · **Entrega: viernes 23/10/2026**
@@ -18,17 +18,20 @@ segundo-semetre-2026/
     │   ├── 01_hola.s … 03_variables.s, build.sh   (sin cambios)
     │   ├── 04_brk.s              parte 1 — pedirle memoria al kernel
     │   ├── 05_alloc_tabla.s      parte 1 — una rutina alloc y su tabla
-    │   └── 06_control_flujo.s    parte 2 — while, if, break, continue
+    │   ├── 06_control_flujo.s    parte 2 — while, if, break, continue
+    │   └── 07_funciones.s        parte 3 — llamadas, recursión
     ├── micro/
     │   ├── 01 … 03               (sin cambios)
     │   ├── 04_heap_modelo.py     parte 1 — el heap modelado en Python
-    │   └── 05_etiquetas.py       parte 2 — etiquetas únicas y pila de ciclos
+    │   ├── 05_etiquetas.py       parte 2 — etiquetas únicas y pila de ciclos
+    │   └── 06_pila_de_llamadas.py    parte 3 — un frame por llamada
     └── minipascal/
-        ├── generador_arm.py      CAMBIÓ — arreglos en el heap, if, while
+        ├── generador_arm.py      CAMBIÓ — arreglos en el heap, if, while, funciones
         ├── ejemplos/
         │   ├── 01 … 11           (sin cambios)
         │   ├── 12_heap.mpas          parte 1
-        │   └── 13_control_flujo.mpas parte 2
+        │   ├── 13_control_flujo.mpas parte 2
+        │   └── 14_funciones.mpas     parte 3
         └── el resto — lexer, parser, ast_nodes, interprete, ... — sin cambios
 ```
 
@@ -58,11 +61,13 @@ cd arm
 ./build.sh 04_brk.s              # 64, 42, 7
 ./build.sh 05_alloc_tabla.s      # 50, 5, 2, 32, 16, 32
 ./build.sh 06_control_flujo.s    # 12
+./build.sh 07_funciones.s        # 5, 120
 
 # 2. Los modelos, sin ensamblador
 cd ../micro
 python3 04_heap_modelo.py
 python3 05_etiquetas.py
+python3 06_pila_de_llamadas.py
 
 # 3. Los dos caminos sobre el mismo árbol
 cd ../minipascal
@@ -70,11 +75,14 @@ python3 main.py            ejemplos/12_heap.mpas           # intérprete
 python3 main.py --compilar ejemplos/12_heap.mpas           # ARM64 + QEMU
 python3 main.py            ejemplos/13_control_flujo.mpas
 python3 main.py --compilar ejemplos/13_control_flujo.mpas
+python3 main.py            ejemplos/14_funciones.mpas
+python3 main.py --compilar ejemplos/14_funciones.mpas
 ```
 
 Cada pareja de líneas (intérprete y `--compilar`) tiene que imprimir
 exactamente lo mismo. `12_heap.mpas` imprime `50 5 0 25`, y
-`13_control_flujo.mpas` imprime `1 0 1 2 3 4 12 6 1` (un número por línea).
+`13_control_flujo.mpas` imprime `1 0 1 2 3 4 12 6 1` y `14_funciones.mpas`
+imprime `36 6 14 120 55 5050 1 0 64 7` (un número por línea).
 
 Y, como siempre, comprueben que nada de lo anterior se rompió:
 
@@ -243,11 +251,11 @@ biblioteca. Nunca los dos.** Por eso este generador usa de libc solo
    Anoten cuánto vale cada una después de cada `bl alloc`.
 
 2. **Una fila más.** Agreguen a mano, en una copia de
-   `05_alloc_tabla.s` llamada `07_prueba.s`, un tercer arreglo
+   `05_alloc_tabla.s` llamada `08_prueba.s`, un tercer arreglo
    `c: array[3] of integer`. Antes de correrlo, predigan: ¿cuánto vale
    `tabla_n`? ¿En qué offset del frame queda `c`? ¿A qué distancia de la
    base de `b` queda la base de `c`? Después corran `./build.sh
-   07_prueba.s` y comparen.
+   08_prueba.s` y comparen.
 
 3. **El desborde que nadie avisa.** Corran esto por los dos caminos:
 
@@ -493,6 +501,159 @@ explicado también al final de `arm/06_control_flujo.s`.
 
 ---
 
+# Parte 3 — Funciones: un frame por llamada
+
+## El problema
+
+Hasta ahora había un solo frame: el de `main`. Una función necesita
+tres cosas que `main` no tenía: **recibir** valores, **devolver** uno, y
+poder **llamarse a sí misma** sin que sus variables se confundan.
+
+> `factorial(3)` llama a `factorial(2)`, y las dos tienen una variable
+> `n`. ¿Dónde vive cada `n`?
+
+Respuesta corta: **en frames distintos, uno por llamada.** Y el
+mecanismo ya lo conocen: es el prólogo y el epílogo de `main`, repetido
+cada vez que se llama a una función.
+
+## Las ideas
+
+### 11. Una función es una etiqueta con su prólogo y su epílogo
+
+El código de una función **no puede quedar en medio del de `main`**: el
+procesador ejecuta de corrido, y caería adentro de ella sin que nadie la
+llamara. Por eso el generador escribe primero `main` completo, y después
+cada función, cada una con su etiqueta:
+
+```
+main:                       fn_cuadrado:
+    ...                         stp x29, x30, [sp, #-16]!   <- prólogo
+    bl fn_cuadrado              mov x29, sp
+    ...                         sub sp, sp, #16
+    ret                         ...
+                                mov sp, x29                 <- epílogo
+                                ldp x29, x30, [sp], #16
+                                ret
+```
+
+El nombre lleva el prefijo `fn_` para que una función de MiniPascal
+llamada `printf` o `main` no choque con las de la biblioteca de C.
+
+Que las funciones queden **después** de `main` tiene una consecuencia
+buena: el ensamblador resuelve las etiquetas cuando ya leyó todo el
+archivo, así que una función puede llamar a otra que aparece más abajo
+(`esPar` y `esImpar` en `14_funciones.mpas`) sin ningún truco de
+declaración previa.
+
+Un `return` no es una instrucción: es poner el valor en `x0` y saltar a
+la etiqueta del epílogo de **esa** función, con un `b`.
+
+### 12. La convención de llamadas
+
+Quien llama y quien es llamado tienen que ponerse de acuerdo en dónde
+viaja cada cosa. En AArch64 es esto:
+
+| Qué | Dónde |
+|---|---|
+| Argumentos 1 al 8 | `x0`, `x1`, ... `x7` |
+| Valor devuelto | `x0` |
+| Dirección de retorno | `x30` (la deja `bl`, la lee `ret`) |
+| Frame pointer de quien llamó | `x29` (hay que guardarlo y restaurarlo) |
+
+Nada en el procesador obliga a esto: es un **acuerdo**, y es lo que
+permite que una función compilada por ustedes llame a `printf`.
+
+Fíjense en la regla de siempre: el valor devuelto va en `x0`, igual que
+el resultado de cualquier expresión. Por eso una llamada se puede usar
+en cualquier lugar donde cabe una expresión (`suma3(cuadrado(2), 3, 4)`)
+sin que el generador haga nada especial.
+
+Y fíjense en por qué **todas** las funciones guardan `x30`: `bl` pisa
+`x30` con la dirección de retorno de *su* llamada. Si una función llama
+a otra y no guardó el suyo, al volver ya no sabe adónde ir.
+
+### 13. Los argumentos pasan por la pila antes de llegar a los registros
+
+Parece más largo de lo necesario: calcular el argumento 1, empujarlo,
+calcular el argumento 2, empujarlo, y **recién al final** sacarlos hacia
+`x1`, `x0`.
+
+```asm
+mov x0, #2
+str x0, [sp, #-16]!          // argumento 1 a la pila
+mov x0, #3
+str x0, [sp, #-16]!          // argumento 2 a la pila
+ldr x1, [sp], #16            // x1 = argumento 2
+ldr x0, [sp], #16            // x0 = argumento 1
+bl fn_suma
+```
+
+¿Por qué no dejar el 2 en `x0` y el 3 en `x1` directamente? Porque en un
+caso real un argumento es una expresión cualquiera, y calcular el
+segundo usa `x0` y `x1` (el modelo de pila de la primera semana). El
+primero se perdería. La pila es lo único que sobrevive a eso, y por eso
+funciona con cualquier anidamiento: `f(g(1), h(2, 3))`.
+
+### 14. Un frame por llamada: la recursión sale sola
+
+No hay nada especial para la recursión. Cada llamada ejecuta el mismo
+prólogo y reserva **su** frame debajo del de quien la llamó. La `n` de
+`factorial(3)` sigue valiendo 3 mientras `factorial(1)` corre más abajo.
+`micro/06_pila_de_llamadas.py` lo muestra paso a paso, y el final de
+`arm/07_funciones.s` lo dibuja.
+
+Cuando una llamada termina, su epílogo deja `sp` exactamente donde
+estaba antes del `bl`. Por eso el temporal que quien llamó había
+empujado (el operando izquierdo de `n * factorial(n - 1)`) está
+esperando donde lo dejó.
+
+Y la pila es finita. Cada nivel de `factorial` ocupa 48 bytes: 16 del
+`stp`, 16 de su celda para `n`, 16 del temporal. En QEMU, con el
+stack por defecto, una recursión de 150 000 niveles corre y una de
+250 000 termina con `Segmentation fault`. Una recursión sin caso base agota el stack
+igual, por una razón distinta a la del ciclo de la parte 2.
+
+## Ejercicios de la parte 3
+
+1. **Con papel.** Sigan `factorial(5)` en `arm/07_funciones.s` hasta que
+   `n` vale 1 (el caso base, justo antes del `cmp`). Dibujen la pila:
+   cuántos frames hay, qué guarda cada uno, y cuántos bytes hay entre el
+   `sp` de `main` y el `sp` en ese momento.
+
+2. **Tres parámetros, a mano.** En un archivo nuevo, `09_prueba.s`,
+   escriban a mano una función `resta3(a, b, c)` que devuelva
+   `a - b - c`, y llámenla con `(10, 3, 2)`. Antes de correrlo, anoten
+   en qué registro llega cada argumento y qué offset recibe cada
+   parámetro. Después `./build.sh 09_prueba.s`: tiene que imprimir `5`.
+
+3. **Quitar el `stp`.** En una copia de `07_funciones.s`, comenten el
+   `stp x29, x30, [sp, #-16]!` del prólogo de `fn_factorial` y el
+   `ldp x29, x30, [sp], #16` de su epílogo. Corranlo. El programa no
+   termina. Expliquen, con el dibujo del ejercicio 1, qué valor tiene
+   `x30` cada vez que se ejecuta `ret`.
+
+4. **Una variable de afuera.** Corran esto con `--compilar`:
+
+   ```pascal
+   program Global;
+   begin
+     var version: integer := 100;
+     function leer(): integer;
+     begin
+       return version;
+     end;
+     writeln(leer());
+   end.
+   ```
+
+   El intérprete imprime `100` y el generador responde con un error.
+   Lean el mensaje y el `LO QUE FALTA AQUÍ` de `visitar_Funcion`.
+   **No se les pide arreglarlo**, pero sí contestar por escrito:
+   ¿dónde tendría que vivir `version` para que `leer` la alcance, y qué
+   cambia en `main` y en `leer` si vive ahí?
+
+---
+
 ## Qué falta para tu proyecto
 
 Todo lo de esta lista lo implementan **ustedes**. Que un mecanismo se
@@ -514,6 +675,11 @@ entenderlo.
 | `break` / `continue` con etiquetas de ciclo | 3.3.9 |
 | Que una comparación se pueda guardar, pasar e imprimir como `bool` | 3.2.3 |
 | Arreglos y variables de `f64`, `bool` o `char`: otro tamaño por celda | 3.2.3 |
+| Variables de afuera visibles dentro de una función | 3.3.2, 3.3.12 |
+| Más de 8 parámetros: del noveno en adelante van por la pila | 3.3.12 |
+| Parámetros y retornos que no son enteros (`f64` va en `d0`–`d7`, no en `x0`) | 3.3.12 |
+| Arreglos y structs como parámetro | 3.3.10, 3.3.12 |
+| Funciones embebidas (`len`, `typeof`, ...) | 3.3.13 |
 
 Y huecos que se quedan abiertos a propósito (todos con un comentario
 `LO QUE FALTA AQUÍ` en el código):
@@ -531,7 +697,16 @@ Y huecos que se quedan abiertos a propósito (todos con un comentario
 - Solo hay arreglos de `integer`, y `length` no está generado.
 - Las variables de bloques anidados siguen compartiendo una sola tabla
   de offsets por programa (el hueco de shadowing de la semana de
-  variables).
+  variables). Cada función sí tiene la suya.
+- Las funciones solo ven sus parámetros y sus variables; las de afuera
+  dan un error (ejercicio 4 de la parte 3).
+- Solo `integer` en parámetros y retorno, hasta 8 parámetros, y sin
+  funciones dentro de funciones.
+- Un arreglo declarado dentro de una función reserva un bloque nuevo
+  en **cada llamada**, y nada lo suelta.
+- Una llamada a una función que no existe, o con otra cantidad de
+  argumentos, se detecta al terminar de generar, con un mensaje claro;
+  no hay verificación de tipos de los argumentos.
 
 ---
 
