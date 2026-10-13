@@ -1,0 +1,59 @@
+(* Control de flujo: if/else, while, break y continue.
+   Se compila con --compilar y el .s trae etiquetas y saltos;
+   al ejecutarlo debe dar lo mismo que el intérprete. *)
+
+program ControlDeFlujo;
+begin
+  var edad: integer := 20;
+
+  (* if con else *)
+  if edad >= 18 then begin
+    writeln(1);        (* mayor de edad *)
+  end else begin
+    writeln(0);        (* menor de edad *)
+  end;
+
+  (* if sin else: la condición es falsa y no pasa nada *)
+  if edad > 100 then begin
+    writeln(999);
+  end;
+
+  (* while normal: cuenta de 0 a 4 *)
+  var contador: integer := 0;
+  while contador < 5 do begin
+    writeln(contador);
+    contador := contador + 1;
+  end;
+
+  (* continue y break: sumar 1+2+4+5 = 12 *)
+  var i: integer := 0;
+  var suma: integer := 0;
+  while i < 10 do begin
+    i := i + 1;
+    if i == 3 then begin
+      continue;        (* saltarse el 3 *)
+    end;
+    if i > 5 then begin
+      break;           (* cortar al pasar de 5 *)
+    end;
+    suma := suma + i;
+  end;
+  writeln(suma);       (* 12 *)
+
+  (* while con etiqueta: break que sale de LOS DOS ciclos *)
+  var total: integer := 0;
+  var vueltas: integer := 0;
+  externo: while vueltas < 100 do begin
+    vueltas := vueltas + 1;
+    var j: integer := 0;
+    while j < 100 do begin
+      j := j + 1;
+      total := total + j;
+      if j == 3 then begin
+        break externo;   (* sale del ciclo de afuera, no solo del de adentro *)
+      end;
+    end;
+  end;
+  writeln(total);        (* 1 + 2 + 3 = 6 *)
+  writeln(vueltas);      (* 1: el ciclo de afuera solo alcanzó a dar una vuelta *)
+end.

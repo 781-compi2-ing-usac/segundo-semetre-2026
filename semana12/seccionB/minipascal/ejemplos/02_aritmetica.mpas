@@ -1,0 +1,34 @@
+(* Precedencia, asociatividad y menos unario.
+
+   Antes de correrlo: escriban en un papel qué creen que imprime cada
+   línea. Después comparen. Las que fallen son las que hay que revisar
+   en la tabla `precedence` del parser. *)
+
+program Aritmetica;
+begin
+  { La multiplicación amarra más fuerte que la suma }
+  writeln(2 + 3 * 4);        { 14, no 20 }
+
+  { Los paréntesis cambian la FORMA del árbol }
+  writeln((2 + 3) * 4);      { 20 }
+
+  { Menos unario: gracias a %prec UMENOS esto NO es -(2 + 3) }
+  writeln(-2 + 3);           { 1 }
+  writeln(- -5);             { 5 }
+
+  { La resta asocia a la izquierda: (10 - 3) - 2, no 10 - (3 - 2) }
+  writeln(10 - 3 - 2);       { 5 }
+
+  { En Pascal `/` siempre da real, aunque los operandos sean enteros }
+  writeln(10 / 4);           { 2.5 }
+  writeln(9 / 3);            { 3.0, no 3 }
+
+  { Reales mezclados con enteros }
+  writeln(1.5 * 2);          { 3.0 }
+
+  { Un bloque anidado. Todavía no hace nada especial, pero en la Sesión 2
+    va a abrir un ámbito propio para sus variables. }
+  begin
+    writeln('estoy dentro de un bloque anidado');
+  end;
+end.

@@ -1,0 +1,21 @@
+(* Heap: dos arreglos, uno al lado del otro en memoria dinámica.
+   Se compila con --compilar y el .s trae la rutina `alloc` y la tabla
+   de bloques; al ejecutarlo debe dar lo mismo que el intérprete. *)
+
+program Heap;
+begin
+  var a: array[4] of integer;
+  var b: array[2] of integer;
+
+  a[0] := 10;
+  a[3] := 40;
+  b[1] := 5;
+
+  writeln(a[0] + a[3]);   (* 50 *)
+  writeln(b[1]);          (* 5 *)
+  writeln(a[1]);          (* 0: nunca se escribió, el heap arranca en ceros *)
+
+  var i: integer := 2;
+  a[i] := a[0] * 2 + b[1];   (* índice y valor son expresiones: 25 *)
+  writeln(a[2]);              (* 25 *)
+end.

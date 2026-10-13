@@ -1,0 +1,21 @@
+(* Este programa está MAL a propósito.
+
+   Córranlo para ver qué reporta el intérprete:
+
+       python main.py ejemplos/03_errores.mpas
+
+   Deberían ver dos mensajes con línea y columna, y ninguna salida del
+   programa: v1 detecta los errores pero NO se recupera, así que se detiene
+   sin construir el AST.
+
+   Comparen ese comportamiento con lo que pide el enunciado de su proyecto
+   (sección 3.4.1, "Resiliencia durante la ejecución"): ustedes deben
+   REPORTAR y SEGUIR, para poder listar varios errores en una sola corrida.
+   Ese es el trabajo de la Sesión 2 (errores semánticos) y de la
+   recuperación con el token `error` de PLY (errores sintácticos).       *)
+
+program Errores;
+begin
+  writeln(1 + @);      { error léxico: '@' no es un carácter del lenguaje }
+  writeln(2 + );       { error sintáctico: falta el operando derecho      }
+end.

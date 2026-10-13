@@ -1,0 +1,41 @@
+(* El programa más pequeño que recorre TODA la cadena del Proyecto 2.
+
+   Córranlo de las dos formas y comparen:
+
+       python main.py            ejemplos/10_aritmetica.mpas    <- intérprete
+       python main.py --compilar ejemplos/10_aritmetica.mpas    <- ARM64 + QEMU
+
+   Tienen que imprimir exactamente lo mismo. Un número lo calcula Python
+   en su máquina x86_64; el otro lo calcula un procesador ARM64 emulado,
+   ejecutando instrucciones que escribió el compilador de ustedes.
+
+   Solo hay enteros y solo hay + - * a propósito. La división queda
+   afuera porque hoy los dos caminos NO coinciden en ella — vean el
+   ejercicio 3 del README, que es justamente ese. *)
+
+program Aritmetica64;
+begin
+  { Empezar por lo mínimo: un literal. Si esto no imprime 42, no siga. }
+  writeln(42);
+
+  { Precedencia: el AST ya la resolvió, el generador solo lo recorre }
+  writeln(2 + 3 * 4);        { 14 }
+
+  { Los paréntesis cambian la forma del árbol, y por eso el orden
+    de las instrucciones generadas }
+  writeln((2 + 3) * 4);      { 20 }
+
+  { Menos unario -> una sola instrucción: neg }
+  writeln(-7 + 10);          { 3 }
+
+  { Asociatividad a la izquierda }
+  writeln(100 - 30 - 20);    { 50 }
+
+  { Una expresión anidada de verdad. Abran salida.s y sigan los
+    str/ldr: cada nivel de anidamiento es un empujón más a la pila.
+    Este es el caso que justifica el modelo de pila. }
+  writeln(((1 + 2) * (3 + 4)) - ((5 - 3) * 2));   { 17 }
+
+  { Un número que NO cabe en los 16 bits de `mov` }
+  writeln(1000000 + 234567);  { 1234567 }
+end.

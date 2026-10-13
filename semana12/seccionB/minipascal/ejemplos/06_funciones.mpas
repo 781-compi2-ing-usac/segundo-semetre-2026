@@ -1,0 +1,91 @@
+program Funciones;
+begin
+  { --------------------------------------------------------------------
+    1. Función simple, con parámetro y valor de retorno.
+  -------------------------------------------------------------------- }
+  function cuadrado(n: integer): integer;
+  begin
+    return n * n;
+  end;
+
+  writeln(cuadrado(6));   { 36 }
+
+  { --------------------------------------------------------------------
+    2. Recursión: factorial. Cada llamada recursiva crea su PROPIO
+       entorno de activación — la "n" de factorial(3) nunca se confunde
+       con la "n" de factorial(2), aunque las dos existan al mismo tiempo
+       mientras la pila de llamadas está creciendo.
+  -------------------------------------------------------------------- }
+  function factorial(n: integer): integer;
+  begin
+    if n <= 1 then begin
+      return 1;
+    end;
+    return n * factorial(n - 1);
+  end;
+
+  writeln(factorial(5));   { 120 }
+
+  { --------------------------------------------------------------------
+    3. Scoping estático: una variable GLOBAL es visible dentro de una
+       función, aunque quien llame a la función tenga una variable LOCAL
+       con el mismo nombre. Si el entorno de activación colgara de quien
+       llama (scoping dinámico) esto daría 999, no 100 — ver
+       micro/01_entornos_activacion.py.
+  -------------------------------------------------------------------- }
+  var version: integer := 100;
+
+  function leerVersion(): integer;
+  begin
+    return version;
+  end;
+
+  function quienLlama(): integer;
+  begin
+    var version: integer := 999;   { sombrea la global, pero SOLO aquí }
+    return leerVersion();
+  end;
+
+  writeln(quienLlama());   { 100, no 999 }
+
+  { --------------------------------------------------------------------
+    4. Declaración previa: esPar llama a esImpar ANTES de que esImpar
+       aparezca en el texto, y viceversa. Funciona sin ningún truco de
+       "forward declaration" — ver la explicación al inicio de
+       parser.py sobre por qué un intérprete que camina el árbol no
+       tiene este problema, a diferencia de un compilador de una sola
+       pasada.
+  -------------------------------------------------------------------- }
+  function esPar(n: integer): boolean;
+  begin
+    if n == 0 then begin
+      return true;
+    end;
+    return esImpar(n - 1);
+  end;
+
+  function esImpar(n: integer): boolean;
+  begin
+    if n == 0 then begin
+      return false;
+    end;
+    return esPar(n - 1);
+  end;
+
+  writeln(esPar(10));    { true }
+  writeln(esImpar(10));  { false }
+
+  { --------------------------------------------------------------------
+    5. Un break/continue perdido dentro de una función se reporta como
+       error semántico, exactamente igual que en la Sesión 3 se reportaba
+       uno perdido fuera de cualquier ciclo — ver Llamada.evaluar en
+       ast_nodes.py y micro/02_limite_de_funcion.py.
+  -------------------------------------------------------------------- }
+  function romperMal(): integer;
+  begin
+    break;
+    return 0;   { esta línea nunca se alcanza }
+  end;
+
+  writeln(romperMal());
+end.
