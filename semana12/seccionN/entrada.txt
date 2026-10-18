@@ -1,0 +1,35 @@
+def saluda() {
+    println!(99);
+}
+saluda();
+let a : [int; 3] = [7, 7, 7];
+println!(a[0]);
+println!(a[2]);
+let b : [int; 3] = [4, 5, 6];
+b[1] = 9;
+println!(b[1]);
+let m : [[int; 3]; 2] = [[1, 2, 3], [4, 5, 6]];
+println!(m[1][2]);
+println!(m[0][0]);
+println!(m);
+let i = 0;
+while i != 2 {
+    let j = 0;
+    while j != 3 {
+        println!(m[i][j]);
+        let j = j + 1;
+    }
+    let i = i + 1;
+}
+def cuenta() {
+    let k = 2;
+    while k != 0 {
+        println!(k);
+        let k = k - 1;
+    }
+}
+cuenta();
+def dame() {
+    return 6;
+}
+println!(dame());
